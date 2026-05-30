@@ -32,7 +32,6 @@ export async function GET() {
 		// Get all licenses with their locations
 		const licenses = await db.license.findMany({
 			where: { orgId },
-
 		});
 
 		// Get insurance

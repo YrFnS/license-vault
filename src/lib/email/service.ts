@@ -1,18 +1,18 @@
-import { db } from '@/lib/db';
+import { db } from "@/lib/db";
 
 export interface SendEmailOptions {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  type: string;
-  orgId?: string;
+	to: string;
+	subject: string;
+	html: string;
+	text: string;
+	type: string;
+	orgId?: string;
 }
 
 export interface EmailResult {
-  success: boolean;
-  error?: string;
-  logId?: string;
+	success: boolean;
+	error?: string;
+	logId?: string;
 }
 
 /**
@@ -20,78 +20,84 @@ export interface EmailResult {
  * In development/sandbox mode, emails are logged to console and stored in the EmailLog table.
  * When SMTP is configured, emails will be sent via the provider.
  */
-export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
-  const { to, subject, html, text, type, orgId } = options;
+export async function sendEmail(
+	options: SendEmailOptions,
+): Promise<EmailResult> {
+	const { to, subject, html, text, type, orgId } = options;
 
-  try {
-    // Check if SMTP is configured
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
+	try {
+		// Check if SMTP is configured
+		const smtpHost = process.env.SMTP_HOST;
+		const smtpPort = process.env.SMTP_PORT;
+		const smtpUser = process.env.SMTP_USER;
+		const smtpPass = process.env.SMTP_PASS;
 
-    if (smtpHost && smtpPort && smtpUser && smtpPass) {
-      // Production: Send via SMTP
-      // We'll implement this when a real SMTP provider is available
-      // For now, fall through to dev mode
-    }
+		if (smtpHost && smtpPort && smtpUser && smtpPass) {
+			// Production: Send via SMTP
+			// We'll implement this when a real SMTP provider is available
+			// For now, fall through to dev mode
+		}
 
-    // Development/Sandbox mode: Log to console and store in DB
-    console.log('📧 Email Service - Sending email:');
-    console.log(`  To: ${to}`);
-    console.log(`  Subject: ${subject}`);
-    console.log(`  Type: ${type}`);
-    console.log(`  HTML length: ${html.length} chars`);
+		// Development/Sandbox mode: Log to console and store in DB
+		console.log("📧 Email Service - Sending email:");
+		console.log(`  To: ${to}`);
+		console.log(`  Subject: ${subject}`);
+		console.log(`  Type: ${type}`);
+		console.log(`  HTML length: ${html.length} chars`);
 
-    // Store in EmailLog (only if orgId is provided)
-    const emailLog = orgId ? await db.emailLog.create({
-      data: {
-        orgId,
-        to,
-        subject,
-        status: 'sent',
-      },
-    }) : null;
+		// Store in EmailLog (only if orgId is provided)
+		const emailLog = orgId
+			? await db.emailLog.create({
+					data: {
+						orgId,
+						to,
+						subject,
+						status: "sent",
+					},
+				})
+			: null;
 
-    return {
-      success: true,
-      logId: emailLog?.id,
-    };
-  } catch (error) {
-    console.error('📧 Email Service - Failed to send email:', error);
+		return {
+			success: true,
+			logId: emailLog?.id,
+		};
+	} catch (error) {
+		console.error("📧 Email Service - Failed to send email:", error);
 
-    // Try to log the failure
-    try {
-      const emailLog = orgId ? await db.emailLog.create({
-        data: {
-          orgId,
-          to,
-          subject,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
-      }) : null;
+		// Try to log the failure
+		try {
+			const emailLog = orgId
+				? await db.emailLog.create({
+						data: {
+							orgId,
+							to,
+							subject,
+							status: "failed",
+							error: error instanceof Error ? error.message : "Unknown error",
+						},
+					})
+				: null;
 
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        logId: emailLog?.id,
-      };
-    } catch {
-      // If even logging fails, just return the error
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Unknown error",
+				logId: emailLog?.id,
+			};
+		} catch {
+			// If even logging fails, just return the error
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Unknown error",
+			};
+		}
+	}
 }
 
 /**
  * Generate a base HTML email template with LicenseVault branding
  */
 export function baseEmailTemplate(content: string, title: string): string {
-  return `
+	return `
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
@@ -212,10 +218,10 @@ export function baseEmailTemplate(content: string, title: string): string {
       ${content}
     </div>
     <div class="footer">
-      <p>Powered by <a href="${process.env.NEXTAUTH_URL || '#'}">LicenseVault</a> — Contractor License Compliance</p>
+      <p>Powered by <a href="${process.env.NEXTAUTH_URL || "#"}">LicenseVault</a> — Contractor License Compliance</p>
       <p style="margin-top: 8px;">This email was sent to {{recipient}}. If you prefer not to receive these emails, you can update your notification preferences in your account settings.</p>
     </div>
   </div>
 </body>
-</html>`.replace('{{recipient}}', '${to}');
+</html>`.replace("{{recipient}}", "${to}");
 }
