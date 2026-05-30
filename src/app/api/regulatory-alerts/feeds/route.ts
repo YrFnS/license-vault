@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     for (const watch of watches) {
       try {
         const searchQuery = `${watch.state} contractor license regulatory changes 2025 ${watch.licenseType || ''}`.trim();
-        const results = await zai.web.search({
+        const results = await (zai as any).web.search({
           query: searchQuery,
           count: 5,
         });

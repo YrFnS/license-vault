@@ -43,41 +43,39 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
     console.log(`  Type: ${type}`);
     console.log(`  HTML length: ${html.length} chars`);
 
-    // Store in EmailLog
-    const emailLog = await db.emailLog.create({
+    // Store in EmailLog (only if orgId is provided)
+    const emailLog = orgId ? await db.emailLog.create({
       data: {
-        orgId: orgId || null,
+        orgId,
         to,
         subject,
-        type,
         status: 'sent',
       },
-    });
+    }) : null;
 
     return {
       success: true,
-      logId: emailLog.id,
+      logId: emailLog?.id,
     };
   } catch (error) {
     console.error('📧 Email Service - Failed to send email:', error);
 
     // Try to log the failure
     try {
-      const emailLog = await db.emailLog.create({
+      const emailLog = orgId ? await db.emailLog.create({
         data: {
-          orgId: orgId || null,
+          orgId,
           to,
           subject,
-          type,
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown error',
         },
-      });
+      }) : null;
 
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        logId: emailLog.id,
+        logId: emailLog?.id,
       };
     } catch {
       // If even logging fails, just return the error

@@ -21,7 +21,7 @@ const sendEmailSchema = z.object({
     'welcome',
     'test',
   ] as const),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
   enhanceSubject: z.boolean().optional().default(false),
 });
 

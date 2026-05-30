@@ -59,9 +59,9 @@ export interface DocumentScanResult {
 
 // ─── VLM Client ────────────────────────────────────────────────────────────
 
-let _zai: InstanceType<typeof ZAI> | null = null;
+let _zai: any = null;
 
-async function getZAI(): Promise<InstanceType<typeof ZAI>> {
+async function getZAI(): Promise<any> {
   if (!_zai) {
     _zai = await ZAI.create();
   }

@@ -136,7 +136,7 @@ export async function GET() {
       },
     });
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="org-compliance-report-${org.name.replace(/\s+/g, '-').toLowerCase()}.pdf"`,

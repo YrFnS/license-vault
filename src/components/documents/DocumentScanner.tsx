@@ -599,7 +599,7 @@ export function DocumentScanner({ scanHistory = [] }: DocumentScannerProps) {
                       )}
                       initial={{ width: 0 }}
                       animate={{ width: `${scanResult.confidence}%` }}
-                      transition={{ duration: 1, ease: 'easeOut' }}
+                      transition={{ duration: 1, ease: 'easeOut' as const }}
                     />
                   </div>
                 </div>

@@ -39,7 +39,7 @@ export async function GET() {
 
 const inviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
-  role: z.enum(['admin', 'member'], { required_error: 'Role is required' }),
+  role: z.enum(['admin', 'member']),
   fullName: z.string().optional(),
 });
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!['owner', 'admin'].includes(orgMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can invite members.' },
         { status: 403 }

@@ -109,8 +109,9 @@ export function ApplicationWizard({ open, onOpenChange, onSuccess }: Application
 
   // Auto-fill applicant name from session
   useEffect(() => {
-    if (session?.user?.name && !form.applicantName) {
-      setForm(f => ({ ...f, applicantName: session.user.name || '' }));
+    const userName = session?.user?.name;
+    if (userName && !form.applicantName) {
+      setForm(f => ({ ...f, applicantName: userName }));
     }
   }, [session]);
 
@@ -493,7 +494,7 @@ export function ApplicationWizard({ open, onOpenChange, onSuccess }: Application
               initial="enter"
               animate="center"
               exit="exit"
-              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              transition={{ duration: 0.25, ease: 'easeInOut' as const }}
             >
               {renderStep()}
             </motion.div>

@@ -12,7 +12,7 @@ export async function GET(
     const { id } = await params;
 
     // id here is the upload token (used as portal token)
-    const subcontractor = await db.subcontractor.findUnique({
+    const subcontractor = await db.subcontractor.findFirst({
       where: { uploadToken: id },
       include: {
         documents: {
@@ -87,7 +87,7 @@ export async function PUT(
   try {
     const { id } = await params;
 
-    const subcontractor = await db.subcontractor.findUnique({
+    const subcontractor = await db.subcontractor.findFirst({
       where: { uploadToken: id },
     });
 

@@ -40,7 +40,7 @@ export async function GET() {
     }[] = [];
 
     // 1. Check for expired licenses in states with active projects
-    const activeProjectStates = new Set(projects.map((p) => p.state).filter(Boolean));
+    const activeProjectStates = new Set(projects.map((p) => p.state).filter((s): s is string => !!s));
     const expiredLicenses = licenses.filter((l) => l.expirationDate < now);
 
     for (const license of expiredLicenses) {
@@ -99,7 +99,7 @@ export async function GET() {
     if (nasclaStates.length >= 2) {
       const nasclaStateNames = nasclaStates.map((s) => s.state);
       const overlappingLicenses = licenses.filter(
-        (l) => l.expirationDate > now && nasclaStateNames.includes(l.state)
+        (l) => l.expirationDate > now && l.state && nasclaStateNames.includes(l.state)
       );
       if (overlappingLicenses.length >= 2) {
         recommendations.push({

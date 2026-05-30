@@ -27,7 +27,7 @@ export async function DELETE(
     }
 
     // Check permissions: only owner or admin can cancel invites
-    if (!['owner', 'admin'].includes(currentUserMember.role)) {
+    if (!['owner', 'admin'].includes(currentUserMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can cancel invites.' },
         { status: 403 }

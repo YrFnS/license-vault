@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ integration }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'Validation error', details: error.issues }, { status: 400 });
     }
     console.error('Error creating integration:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

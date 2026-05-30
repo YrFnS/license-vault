@@ -386,7 +386,7 @@ export function DocumentManager({ licenseId, userRole }: DocumentManagerProps) {
                           className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"
                           initial={{ width: 0 }}
                           animate={{ width: `${uploadProgress}%` }}
-                          transition={{ duration: 0.3, ease: 'easeOut' }}
+                          transition={{ duration: 0.3, ease: 'easeOut' as const }}
                         />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1.5 text-center">

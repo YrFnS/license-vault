@@ -297,7 +297,7 @@ export function ExpirationCheckWidget({ className }: ExpirationCheckWidgetProps)
                   key={item.key}
                   initial={{ opacity: 0, y: 12, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ delay: i * 0.07, duration: 0.35, ease: 'easeOut' }}
+                  transition={{ delay: i * 0.07, duration: 0.35, ease: 'easeOut' as const }}
                   whileHover={{ scale: 1.03, y: -2 }}
                   className="group"
                 >

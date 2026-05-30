@@ -42,6 +42,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Link not found' }, { status: 404 });
     }
 
+    const qualifierName = `${existingLink.qualifier.firstName} ${existingLink.qualifier.lastName}`;
+
     // Create audit log entry before deletion
     await db.auditLog.create({
       data: {
@@ -50,8 +52,8 @@ export async function DELETE(
         action: 'delete',
         entityType: 'qualifier_license',
         entityId: existingLink.id,
-        entityName: existingLink.qualifier.name,
-        details: `Unlinked qualifier ${existingLink.qualifier.name} from license`,
+        entityName: qualifierName,
+        details: `Unlinked qualifier ${qualifierName} from license`,
       },
     });
 

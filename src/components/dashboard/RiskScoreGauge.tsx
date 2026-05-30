@@ -165,7 +165,7 @@ export function RiskScoreGauge({ score, totalItems = 0, itemsNeedingAction = 0 }
                     strokeLinecap="round"
                     initial={{ pathLength: 0 }}
                     animate={{ pathLength: 1 }}
-                    transition={{ duration: 1.5, ease: 'easeOut' }}
+                    transition={{ duration: 1.5, ease: 'easeOut' as const }}
                   />
 
                   {/* Needle */}

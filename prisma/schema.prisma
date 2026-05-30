@@ -106,6 +106,7 @@ model License {
   autoRenew       Boolean  @default(false)
   renewalHistory  String?
   locationId     String?
+  location       Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
   createdById    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -130,6 +131,7 @@ model Location {
   zip       String?
   createdAt DateTime @default(now())
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  licenses  License[]
 }
 
 model AlertPreference {

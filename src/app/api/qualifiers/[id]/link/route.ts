@@ -7,7 +7,7 @@ import { z } from 'zod';
 const linkLicenseSchema = z.object({
   licenseId: z.string().min(1, 'License ID is required'),
   role: z.string().default('qualifier'),
-  startDate: z.string().min(1, 'Start date is required'),
+  startDate: z.string().optional(),
   endDate: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -61,7 +61,7 @@ export async function POST(
       );
     }
 
-    const { licenseId, role, startDate, endDate, notes } = result.data;
+    const { licenseId, role } = result.data;
 
     // Verify license exists and belongs to org
     const license = await db.license.findFirst({
@@ -86,11 +86,10 @@ export async function POST(
         qualifierId,
         licenseId,
         role,
-        startDate: new Date(startDate),
-        endDate: endDate && endDate.trim() !== '' ? new Date(endDate) : null,
-        notes: notes || null,
       },
     });
+
+    const qualifierName = `${qualifier.firstName} ${qualifier.lastName}`;
 
     // Create audit log entry
     await db.auditLog.create({
@@ -100,8 +99,8 @@ export async function POST(
         action: 'create',
         entityType: 'qualifier_license',
         entityId: qualifierLicense.id,
-        entityName: `${qualifier.name} - ${license.name}`,
-        details: `Linked qualifier ${qualifier.name} to license ${license.name}`,
+        entityName: `${qualifierName} - ${license.name}`,
+        details: `Linked qualifier ${qualifierName} to license ${license.name}`,
       },
     });
 

@@ -85,22 +85,7 @@
   "categories": ["business", "productivity"],
   "iarc_rating_id": "",
   "prefer_related_applications": false,
-  "screenshots": [
-    {
-      "src": "/icons/screenshot-wide.png",
-      "sizes": "1920x1080",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "License Vault Dashboard"
-    },
-    {
-      "src": "/icons/screenshot-narrow.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "License Vault Mobile View"
-    }
-  ],
+
   "shortcuts": [
     {
       "name": "View Dashboard",

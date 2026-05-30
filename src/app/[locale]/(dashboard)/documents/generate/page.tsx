@@ -278,7 +278,7 @@ export default function DocumentGeneratorPage() {
             <CardContent>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {TEMPLATES.map(tpl => {
-                  const templateKey = tpl.key as keyof IntlMessages['documentGenerator'];
+                  const templateKey = tpl.key as string;
                   const templateName = t(tpl.key as any);
                   return (
                     <button

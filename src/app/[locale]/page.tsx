@@ -288,7 +288,7 @@ export default function LandingPage() {
             transition={{
               duration: 6,
               repeat: Infinity,
-              ease: 'easeInOut',
+              ease: 'easeInOut' as const,
             }}
           >
             <Shield className="size-24 md:size-32 text-emerald-600 dark:text-emerald-400" />
@@ -302,7 +302,7 @@ export default function LandingPage() {
             transition={{
               duration: 7,
               repeat: Infinity,
-              ease: 'easeInOut',
+              ease: 'easeInOut' as const,
               delay: 1,
             }}
           >
@@ -326,7 +326,7 @@ export default function LandingPage() {
               transition={{
                 duration: 4 + i * 0.8,
                 repeat: Infinity,
-                ease: 'easeInOut',
+                ease: 'easeInOut' as const,
                 delay: i * 0.6,
               }}
             />
@@ -346,7 +346,7 @@ export default function LandingPage() {
               transition={{
                 duration: 5 + i * 0.5,
                 repeat: Infinity,
-                ease: 'easeInOut',
+                ease: 'easeInOut' as const,
                 delay: i * 0.8 + 0.3,
               }}
             />

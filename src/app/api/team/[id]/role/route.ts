@@ -5,10 +5,7 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 
 const changeRoleSchema = z.object({
-  role: z.enum(['owner', 'admin', 'member'], {
-    required_error: 'Role is required',
-    invalid_type_error: 'Invalid role. Must be owner, admin, or member.',
-  }),
+  role: z.enum(['owner', 'admin', 'member']),
 });
 
 // PUT: Change a member's role (owner only)

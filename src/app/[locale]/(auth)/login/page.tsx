@@ -80,7 +80,7 @@ export default function LoginPage() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      transition={{ duration: 0.4, ease: 'easeOut' as const }}
       className="w-full"
     >
       {/* Mobile logo - shown only on mobile since layout handles desktop */}
@@ -193,7 +193,7 @@ export default function LoginPage() {
                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                   initial={{ x: '-100%' }}
                   animate={{ x: '100%' }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' as const }}
                 />
               )}
               {isLoading ? (

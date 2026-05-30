@@ -161,7 +161,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!['owner', 'admin'].includes(orgMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can create subcontractors.' },
         { status: 403 }

@@ -406,7 +406,7 @@ export default function VendorScoresPage() {
           { label: t('flagged'), value: stats.flaggedCount, icon: Flag, color: 'red' },
         ].map((stat) => (
           <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-s-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderStartColor: stat.color === 'teal' ? '#14b8a6' : stat.color === 'emerald' ? '#10b981' : stat.color === 'amber' ? '#f59e0b' : '#ef4444' }}>
+            <Card className="border-s-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderInlineStartColor: stat.color === 'teal' ? '#14b8a6' : stat.color === 'emerald' ? '#10b981' : stat.color === 'amber' ? '#f59e0b' : '#ef4444' }}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>

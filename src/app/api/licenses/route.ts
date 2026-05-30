@@ -179,8 +179,8 @@ export async function POST(request: Request) {
     const sanitizedType = sanitizeString(type);
     const sanitizedLicenseNumber = sanitizeString(licenseNumber);
     const sanitizedIssuedBy = sanitizeString(issuedBy);
-    const sanitizedState = state ? sanitizeString(state) : null;
-    const sanitizedNotes = notes ? sanitizeString(notes) : null;
+    const sanitizedState = state ? sanitizeString(state) : undefined;
+    const sanitizedNotes = notes ? sanitizeString(notes) : undefined;
 
     const license = await db.license.create({
       data: {

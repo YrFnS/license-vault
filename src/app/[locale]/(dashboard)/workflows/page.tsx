@@ -595,7 +595,7 @@ export default function WorkflowsPage() {
                                   <motion.div
                                     initial={{ width: 0 }}
                                     animate={{ width: `${progress}%` }}
-                                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                                    transition={{ duration: 0.8, ease: 'easeOut' as const }}
                                     className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500"
                                   />
                                 </div>

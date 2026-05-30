@@ -12,7 +12,7 @@ export async function GET() {
 
     // Get user's org
     const orgMember = await db.orgMember.findFirst({
-      where: { userId: session.user.id },
+      where: { userId: (session.user as any).id },
       include: { org: true },
     });
 

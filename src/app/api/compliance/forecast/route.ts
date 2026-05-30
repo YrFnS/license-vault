@@ -79,11 +79,10 @@ export async function GET() {
         return ce.completionDate <= date && ce.hoursEarned < ce.hoursRequired;
       });
 
-      // Qualifiers at risk in this window
+      // Qualifiers at risk in this window (qualifiers only track licenseExpiry, not insuranceExpiry)
       const qualifiersAtRisk = qualifiers.filter((q) => {
         const licenseAtRisk = q.licenseExpiry && q.licenseExpiry > now && q.licenseExpiry <= date;
-        const insuranceAtRisk = q.insuranceExpiry && q.insuranceExpiry > now && q.insuranceExpiry <= date;
-        return licenseAtRisk || insuranceAtRisk;
+        return licenseAtRisk;
       });
 
       return {
@@ -118,8 +117,8 @@ export async function GET() {
         })),
         qualifiersAtRisk: qualifiersAtRisk.map((q) => ({
           id: q.id,
-          name: q.name,
-          riskType: q.licenseExpiry && q.licenseExpiry <= date ? 'license' : 'insurance',
+          name: `${q.firstName} ${q.lastName}`,
+          riskType: 'license',
         })),
       };
     });
@@ -201,8 +200,7 @@ export async function GET() {
         totalCeGaps: ceTrackings.filter((ce) => ce.hoursEarned < ce.hoursRequired).length,
         totalQualifiersAtRisk: qualifiers.filter((q) => {
           const licenseRisk = q.licenseExpiry && q.licenseExpiry <= windows[90];
-          const insRisk = q.insuranceExpiry && q.insuranceExpiry <= windows[90];
-          return licenseRisk || insRisk;
+          return !!licenseRisk;
         }).length,
       },
     });

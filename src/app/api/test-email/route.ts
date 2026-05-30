@@ -40,7 +40,7 @@ export async function POST() {
       return NextResponse.json({
         success: true,
         message: 'Test email sent successfully. Check the console for dev mode output.',
-        messageId: result.messageId,
+        providerId: result.providerId,
       });
     }
 

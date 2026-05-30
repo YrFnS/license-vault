@@ -62,7 +62,7 @@ function SuccessCheckmark() {
             strokeWidth="3" fill="none"
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
+            transition={{ duration: 0.6, ease: 'easeOut' as const }}
           />
           <motion.circle
             cx="40" cy="40" r="34"
@@ -70,7 +70,7 @@ function SuccessCheckmark() {
             strokeWidth="0"
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.4, ease: 'easeOut' }}
+            transition={{ delay: 0.3, duration: 0.4, ease: 'easeOut' as const }}
           />
           <motion.path
             d="M26 40 L36 50 L54 32"
@@ -78,14 +78,14 @@ function SuccessCheckmark() {
             strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none"
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
+            transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' as const }}
           />
         </svg>
         <motion.div
           className="absolute inset-0 rounded-full bg-emerald-400/20 blur-xl"
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1.5 }}
-          transition={{ delay: 0.4, duration: 0.8, ease: 'easeOut' }}
+          transition={{ delay: 0.4, duration: 0.8, ease: 'easeOut' as const }}
         />
       </div>
     </div>
@@ -233,7 +233,7 @@ export default function SignupPage() {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      transition={{ duration: 0.4, ease: 'easeOut' as const }}
       className="w-full"
     >
       {/* Mobile logo */}
@@ -481,7 +481,7 @@ export default function SignupPage() {
                         className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                         initial={{ x: '-100%' }}
                         animate={{ x: '100%' }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' as const }}
                       />
                     )}
                     {isLoading ? (

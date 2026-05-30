@@ -28,7 +28,7 @@ export async function POST(
     }
 
     // Check permissions: only owner or admin can resend invites
-    if (!['owner', 'admin'].includes(currentUserMember.role)) {
+    if (!['owner', 'admin'].includes(currentUserMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can resend invites.' },
         { status: 403 }

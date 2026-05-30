@@ -130,7 +130,7 @@ export function DocumentViewer({
   };
 
   const handleDownload = () => {
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = downloadUrl;
     a.download = document.fileName;
     a.click();

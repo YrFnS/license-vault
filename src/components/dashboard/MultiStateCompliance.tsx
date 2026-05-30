@@ -235,7 +235,7 @@ export function MultiStateCompliance() {
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${sc.complianceScore}%` }}
-                          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                          transition={{ duration: 0.8, ease: 'easeOut' as const, delay: 0.2 }}
                           className={`h-full rounded-full ${colors.progress}`}
                         />
                       </div>

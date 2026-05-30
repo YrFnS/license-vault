@@ -41,7 +41,7 @@ export async function GET() {
       },
     });
 
-    let organization = null;
+    let organization: { id: string; name: string; tradeType: string; primaryState: string } | null = null;
     if (orgMember) {
       organization = await db.organization.findUnique({
         where: { id: orgMember.orgId },

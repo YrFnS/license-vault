@@ -122,7 +122,7 @@ export async function GET(request: Request) {
 
 const createInsuranceSchema = z.object({
   name: z.string().min(1, 'Policy name is required'),
-  type: z.enum(['insurance', 'bond', 'certificate'], { required_error: 'Type is required' }),
+  type: z.enum(['insurance', 'bond', 'certificate']),
   policyNumber: z.string().min(1, 'Policy number is required'),
   provider: z.string().min(1, 'Provider is required'),
   coverageAmount: z.number().min(0, 'Coverage amount must be positive'),
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!['owner', 'admin'].includes(orgMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can create records.' },
         { status: 403 }
@@ -210,8 +210,8 @@ export async function POST(request: Request) {
     const sanitizedName = sanitizeString(name);
     const sanitizedPolicyNumber = sanitizeString(policyNumber);
     const sanitizedProvider = sanitizeString(provider);
-    const sanitizedHolderName = holderName ? sanitizeString(holderName) : null;
-    const sanitizedNotes = notes ? sanitizeString(notes) : null;
+    const sanitizedHolderName = holderName ? sanitizeString(holderName) : undefined;
+    const sanitizedNotes = notes ? sanitizeString(notes) : undefined;
 
     // Compute status based on expiration date
     const expDate = new Date(expirationDate);

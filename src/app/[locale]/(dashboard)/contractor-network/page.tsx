@@ -34,10 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
   Search,
@@ -46,8 +43,6 @@ import {
   List,
   Star,
   ShieldCheck,
-  CheckCircle2,
-  XCircle,
   Eye,
   Loader2,
   Upload,
@@ -59,13 +54,10 @@ import {
   Phone,
   Mail,
   Globe,
-  FileText,
   Download,
   Zap,
   TrendingUp,
   Shield,
-  Clock,
-  Briefcase,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -218,7 +210,7 @@ function TradeBadge({ tradeType }: { tradeType: string }) {
     other: { className: 'bg-gray-100 text-gray-700 dark:bg-gray-800/40 dark:text-gray-300 border-gray-200 dark:border-gray-700' },
   };
   const c = config[tradeType] || config.other;
-  const labelKey = tradeType as keyof IntlMessages['contractorNetwork'];
+  const labelKey = tradeType as string;
   const label = t(labelKey as any) || tradeType;
   return (
     <Badge variant="outline" className={cn('text-xs font-medium capitalize', c.className)}>
@@ -550,17 +542,17 @@ export default function ContractorNetworkPage() {
         if (lines.length < 2) { toast.error('CSV file must have a header row and at least one data row'); setImporting(false); return; }
         const headerLine = lines[0];
         const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase().replace(/\s+/g, ''));
-        const contractors = [];
+        const parsedContractors: Record<string, string>[] = [];
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].match(/(".*?"|[^",]+)/g)?.map(v => v.trim().replace(/^"|"$/g, '')) || [];
-          const row: any = {};
+          const row = {};
           headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
-          contractors.push(row);
+          parsedContractors.push(row);
         }
-        const res = await fetch('/api/contractor-directory/import', {
+        const res = await fetch('/api/contractor-directory/import' as string, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contractors }),
+          body: JSON.stringify({ contractors: parsedContractors }),
         });
         if (!res.ok) throw new Error('Import failed');
         const data = await res.json();

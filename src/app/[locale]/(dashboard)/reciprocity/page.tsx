@@ -325,7 +325,7 @@ export default function ReciprocityPage() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
+            transition={{ duration: 0.4, ease: 'easeOut' as const }}
           >
             <Card className={hasReciprocity
               ? 'border-emerald-200 dark:border-emerald-800/50'
@@ -597,7 +597,7 @@ export default function ReciprocityPage() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
+            transition={{ duration: 0.35, ease: 'easeOut' as const }}
           >
             <Card className="border-emerald-200 dark:border-emerald-800/50">
               <CardHeader className="pb-3">

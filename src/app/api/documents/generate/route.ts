@@ -14,7 +14,7 @@ const generateSchema = z.object({
     'vendor_questionnaire',
     'custom',
   ]),
-  data: z.record(z.any()),
+  data: z.record(z.string(), z.unknown()),
   format: z.enum(['text', 'html']).default('html'),
 });
 

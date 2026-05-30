@@ -383,7 +383,7 @@ export async function GET(request: Request) {
           const endorsements: string[] = (() => {
             try { const p = JSON.parse(ib.endorsementTypes || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
           })();
-          return ib.additionalInsured && ib.primaryNoncontributory && ib.waiverOfSubrogation && endorsements.length > 0;
+          return ib.additionalInsured && ib.primaryNoncontrib && ib.waiverSubrogation && endorsements.length > 0;
         }).length;
         doc.text(`COI Compliance: ${coiCompliant}/${coiRecords.length} records fully compliant`, margin, y);
         y += 7;

@@ -1,5 +1,16 @@
 import ZAI from 'z-ai-web-dev-sdk';
 
+interface ZAIInstance {
+  llm: {
+    chat: (options: {
+      messages: Array<{ role: string; content: string }>;
+      maxTokens?: number;
+    }) => Promise<{
+      choices?: Array<{ message?: { content?: string } }>;
+    }>;
+  };
+}
+
 interface DocumentGenerationRequest {
   template: string;
   data: Record<string, any>;
@@ -33,7 +44,7 @@ const templatePrompts: Record<string, string> = {
 export async function generateDocument(
   request: DocumentGenerationRequest
 ): Promise<GeneratedDocument> {
-  const zai = await ZAI.create();
+  const zai = (await ZAI.create()) as unknown as ZAIInstance;
 
   const systemPrompt = templatePrompts[request.template] || templatePrompts.custom;
 

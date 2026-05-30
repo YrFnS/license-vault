@@ -26,9 +26,7 @@ export async function GET() {
       where: { orgId: orgMember.orgId },
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: {
-          select: { licenses: true },
-        },
+        licenses: { select: { id: true } },
       },
     });
 

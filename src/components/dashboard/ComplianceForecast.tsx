@@ -125,7 +125,7 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.35, ease: 'easeOut' },
+    transition: { duration: 0.35, ease: 'easeOut' as const },
   },
 };
 
@@ -213,7 +213,7 @@ export function ComplianceForecast({ licenses, totalLicenses, activeLicenses }: 
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${compliancePercent}%` }}
-              transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
+              transition={{ duration: 1, ease: 'easeOut' as const, delay: 0.3 }}
               className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-500/30"
             />
           </div>

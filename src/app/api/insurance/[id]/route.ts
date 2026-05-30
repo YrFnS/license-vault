@@ -116,7 +116,7 @@ export async function PUT(
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!['owner', 'admin'].includes(orgMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can update records.' },
         { status: 403 }
@@ -346,7 +346,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!['owner', 'admin'].includes(orgMember.role as string)) {
       return NextResponse.json(
         { error: 'Insufficient permissions. Only owners and admins can delete records.' },
         { status: 403 }

@@ -150,7 +150,15 @@ export async function GET(request: Request) {
     const complianceScore = totalItems > 0 ? Math.round((activeItems / totalItems) * 100) : 100;
 
     // "What-If" scenario analysis
-    let whatIfResult = null;
+    let whatIfResult: {
+      skippedItem: { id: string; name: string; type: 'license' | 'insurance' };
+      originalComplianceScore: number;
+      newComplianceScore: number;
+      complianceDelta: number;
+      atRiskItems: { id: string; name: string; type: 'license' | 'insurance'; riskScore: number }[];
+      financialExposure: number;
+      impact: string;
+    } | null = null;
     if (scenario === 'skip_renewal' && skipLicenseId) {
       const skippedItem = allItems.find(i => i.id === skipLicenseId);
       if (skippedItem) {
