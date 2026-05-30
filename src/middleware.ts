@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server';
 
 const intlMiddleware = createMiddleware(routing);
 
-const AI_DOMAIN = process.env.AI_API_URL ? new URL(process.env.AI_API_URL).hostname : 'openrouter.ai';
+const AI_DOMAIN = process.env.AI_API_URL ? new URL(process.env.AI_API_URL).hostname : (process.env.AI_DOMAIN || 'openrouter.ai');
 
 // ── In-memory rate limit store (Edge-compatible) ────────────────────────────
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -101,7 +101,8 @@ export default function middleware(request: NextRequest) {
       const host = request.headers.get('host');
 
       // Allow requests with valid same-origin header
-      const allowedOrigins = [host, `localhost:${request.nextUrl.port || 3000}`];
+      const devPort = process.env.DEV_PORT || '3000';
+      const allowedOrigins = [host, `localhost:${request.nextUrl.port || devPort}`];
       const requestOrigin = origin || (referer ? new URL(referer).host : '');
 
       const isSameOrigin = requestOrigin && allowedOrigins.some(allowed =>

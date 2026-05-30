@@ -30,11 +30,11 @@ import {
 
 // ─── SMTP Configuration ────────────────────────────────────────────────────
 
-const SMTP_HOST = process.env.SMTP_HOST || 'localhost';
+const SMTP_HOST = process.env.SMTP_HOST || 'localhost'; // falls back to dev mode
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || 'License Vault <noreply@localhost>'; // Configure SMTP_FROM env var for production email
+const SMTP_FROM = process.env.SMTP_FROM || `License Vault <${process.env.SMTP_FROM_EMAIL || 'noreply@localhost'}>`; // Configure SMTP_FROM env var for production email
 const APP_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || '';
 
 /** Whether we are in "development mode" — emails log to console instead of sending */

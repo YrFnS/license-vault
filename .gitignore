@@ -32,6 +32,26 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# GitNexus local data
+.gitnexus/
+
+# Agent context / work logs
+worklog.md
+DOCS.md
+AI_AGENT_GUIDE.md
+improvement-plan.md
+agent-ctx/
+.claude/
+.crew/
+~/
+
+# Misc
+*.log
+*.tmp
+.env.local
+.env*.local
 
 # vercel
 .vercel
@@ -51,3 +71,8 @@ server.log
 .crew/
 .pi-lens/
 ~/.pi/
+
+!.crew/artifacts/
+!.crew/graphs/
+!.crew/artifacts/.gitkeep
+!.crew/graphs/.gitkeep
