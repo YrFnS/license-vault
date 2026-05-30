@@ -1,0 +1,15 @@
+{
+  "title": "استيراد التراخيص",
+  "subtitle": "قم بتحميل ملف CSV لاستيراد التراخيص بالجملة",
+  "dragDrop": "اسحب وأفلت ملف CSV هنا، أو انقر للتصفح",
+  "supportedFormats": "الصيغ المدعومة: CSV",
+  "maxSize": "الحد الأقصى لحجم الملف: 10 ميجابايت",
+  "preview": "معاينة",
+  "importing": "جاري الاستيراد...",
+  "importSuccess": "تم استيراد {count} ترخيص بنجاح",
+  "importError": "فشل استيراد التراخيص",
+  "requiredColumns": "الأعمدة المطلوبة: name, licenseNumber, issuedBy, issueDate, expirationDate",
+  "optionalColumns": "أعمدة اختيارية: type, notes",
+  "startImport": "بدء الاستيراد",
+  "clearFile": "مسح الملف"
+}

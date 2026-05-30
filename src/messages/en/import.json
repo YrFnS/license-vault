@@ -1,0 +1,15 @@
+{
+  "title": "Import Licenses",
+  "subtitle": "Upload a CSV file to bulk import licenses",
+  "dragDrop": "Drag and drop your CSV file here, or click to browse",
+  "supportedFormats": "Supported formats: CSV",
+  "maxSize": "Max file size: 10MB",
+  "preview": "Preview",
+  "importing": "Importing...",
+  "importSuccess": "{count} licenses imported successfully",
+  "importError": "Failed to import licenses",
+  "requiredColumns": "Required columns: name, licenseNumber, issuedBy, issueDate, expirationDate",
+  "optionalColumns": "Optional columns: type, notes",
+  "startImport": "Start Import",
+  "clearFile": "Clear File"
+}

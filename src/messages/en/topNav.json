@@ -1,0 +1,10 @@
+{
+  "searchTitle": "Search",
+  "searchPlaceholder": "Search pages...",
+  "searchHint": "Start typing to search pages...",
+  "searchNoResults": "No pages found",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "themeSystem": "System",
+  "themeToggle": "Toggle theme"
+}

@@ -1,0 +1,22 @@
+{
+  "title": "Renew License",
+  "description": "Extend this license's expiration date by one year",
+  "currentExpiration": "Current Expiration",
+  "newExpiration": "New Expiration",
+  "notes": "Renewal Notes",
+  "notesPlaceholder": "Add notes about this renewal...",
+  "confirm": "Confirm Renewal",
+  "cancel": "Cancel",
+  "success": "License renewed successfully",
+  "error": "Failed to renew license",
+  "history": "Renewal History",
+  "noHistory": "No renewal history",
+  "renewedOn": "Renewed on {date}",
+  "autoRenew": "Auto-Renew",
+  "autoRenewDesc": "Automatically renew this license before expiration",
+  "renewButton": "Renew License",
+  "renewedBadge": "Renewed",
+  "daysUntilExpiry": "{days} days until expiry",
+  "expiredAgo": "Expired {days} days ago",
+  "renewalNeeded": "Renewal Needed"
+}

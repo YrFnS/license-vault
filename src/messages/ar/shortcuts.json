@@ -1,0 +1,29 @@
+{
+  "title": "اختصارات لوحة المفاتيح",
+  "subtitle": "إجراءات سريعة لتسريع سير عملك",
+  "then": "ثم",
+  "footer": "استخدم هذه الاختصارات للتنقل بشكل أسرع",
+  "categories": {
+    "navigation": "التنقل",
+    "actions": "الإجراءات",
+    "general": "عام"
+  },
+  "shortcuts": {
+    "navDashboard": "الذهاب إلى لوحة التحكم",
+    "navLicenses": "الذهاب إلى التراخيص",
+    "navProjects": "الذهاب إلى المشاريع",
+    "navSettings": "الذهاب إلى الإعدادات",
+    "navTeam": "الذهاب إلى الفريق",
+    "navCompliance": "الذهاب إلى الامتثال",
+    "navCalendar": "الذهاب إلى التقويم",
+    "navAdmin": "الذهاب إلى الإدارة",
+    "navAiChat": "الذهاب إلى المحادثة الذكية",
+    "actNewLicense": "إنشاء ترخيص جديد",
+    "actSearch": "البحث",
+    "actToggleSidebar": "تبديل الشريط الجانبي",
+    "actRefresh": "تحديث",
+    "genShowShortcuts": "عرض الاختصارات",
+    "genShowShortcutsAlt": "عرض الاختصارات",
+    "genCloseDialog": "إغلاق الحوار"
+  }
+}

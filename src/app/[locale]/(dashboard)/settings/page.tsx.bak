@@ -1,0 +1,451 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useTranslations, useLocale } from 'next-intl';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Building2, MapPin, Shield, CreditCard, ArrowRight, Copy, Plus, Link2, ExternalLink, Check } from 'lucide-react';
+import { toast } from 'sonner';
+import { Link } from '@/i18n/navigation';
+
+const US_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
+  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
+];
+
+interface OrgData {
+  id: string;
+  name: string;
+  tradeType: string;
+  primaryState: string;
+  plan: string;
+  _count?: {
+    members: number;
+    licenses: number;
+  };
+}
+
+interface ShareLink {
+  id: string;
+  token: string;
+  createdAt: string;
+}
+
+export default function SettingsPage() {
+  const t = useTranslations('settings');
+  const tCompliance = useTranslations('compliance');
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
+
+  const [org, setOrg] = useState<OrgData | null>(null);
+  const [userRole, setUserRole] = useState('member');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const [orgName, setOrgName] = useState('');
+  const [tradeType, setTradeType] = useState('');
+  const [primaryState, setPrimaryState] = useState('');
+
+  // Compliance portal state
+  const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setOrg(data.organization);
+        setUserRole(data.userRole || 'member');
+        setOrgName(data.organization.name);
+        setTradeType(data.organization.tradeType);
+        setPrimaryState(data.organization.primaryState);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchShareLinks = useCallback(async () => {
+    try {
+      setShareLoading(true);
+      const res = await fetch('/api/compliance');
+      if (res.ok) {
+        const data = await res.json();
+        setShareLinks(data.shares || []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setShareLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+    fetchShareLinks();
+  }, [fetchSettings, fetchShareLinks]);
+
+  useEffect(() => {
+    if (org) {
+      setHasChanges(
+        orgName !== org.name ||
+        tradeType !== org.tradeType ||
+        primaryState !== org.primaryState
+      );
+    }
+  }, [orgName, tradeType, primaryState, org]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: orgName,
+          tradeType,
+          primaryState,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setOrg(data.organization);
+        setOrgName(data.organization.name);
+        setTradeType(data.organization.tradeType);
+        setPrimaryState(data.organization.primaryState);
+        setHasChanges(false);
+        toast.success(t('saveSuccess'));
+      } else {
+        const data = await res.json();
+        toast.error(data.error || t('saveError'));
+      }
+    } catch {
+      toast.error(t('saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateLink = async () => {
+    setGeneratingLink(true);
+    try {
+      const res = await fetch('/api/compliance', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setShareLinks((prev) => [
+          {
+            id: data.id,
+            token: data.token,
+            createdAt: data.createdAt,
+          },
+          ...prev,
+        ]);
+        toast.success(tCompliance('generateSuccess'));
+      } else {
+        toast.error(tCompliance('generateError'));
+      }
+    } catch {
+      toast.error(tCompliance('generateError'));
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const handleCopyLink = async (token: string, id: string) => {
+    const url = `${window.location.origin}/${locale}/compliance/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      toast.success(tCompliance('linkCopied'));
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Fallback
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedId(id);
+      toast.success(tCompliance('linkCopied'));
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  const isOwner = userRole === 'owner';
+
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-2xl">
+        <Skeleton className="h-8 w-32" />
+        <Card>
+          <CardContent className="p-6 space-y-6">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
+      </div>
+
+      {/* Organization Profile */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Building2 className="size-5 text-emerald-600" />
+            <CardTitle>{t('orgProfile')}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="orgName">{t('orgName')}</Label>
+            <Input
+              id="orgName"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder={t('orgNamePlaceholder')}
+              disabled={!isOwner}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tradeType">{t('tradeType')}</Label>
+            <Input
+              id="tradeType"
+              value={tradeType}
+              onChange={(e) => setTradeType(e.target.value)}
+              placeholder={t('tradeTypePlaceholder')}
+              disabled={!isOwner}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="primaryState">{t('primaryState')}</Label>
+            <Select
+              value={primaryState}
+              onValueChange={setPrimaryState}
+              disabled={!isOwner}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t('primaryStatePlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {US_STATES.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isOwner && (
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className="bg-emerald-600 hover:bg-emerald-700 min-w-[120px]"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin me-2" />
+                  {tCommon('loading')}
+                </>
+              ) : (
+                tCommon('save')
+              )}
+            </Button>
+          )}
+
+          {!isOwner && (
+            <p className="text-sm text-muted-foreground">
+              Only the organization owner can update these settings.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Compliance Portal Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield className="size-5 text-emerald-600" />
+            <CardTitle>{tCompliance('title')}</CardTitle>
+          </div>
+          <CardDescription>{t('complianceDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Generate button */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleGenerateLink}
+              disabled={generatingLink}
+              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+            >
+              {generatingLink ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {tCommon('loading')}
+                </>
+              ) : (
+                <>
+                  <Plus className="size-4" />
+                  {tCompliance('generateLink')}
+                </>
+              )}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {tCompliance('shareUrl')}
+            </p>
+          </div>
+
+          {/* Existing links */}
+          <div>
+            <h3 className="text-sm font-medium mb-3">{tCompliance('existingLinks')}</h3>
+            {shareLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : shareLinks.length === 0 ? (
+              <div className="text-center py-6 border rounded-lg border-dashed">
+                <Link2 className="size-8 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">{tCompliance('noLinks')}</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {shareLinks.map((link) => {
+                  const shareUrl = typeof window !== 'undefined'
+                    ? `${window.location.origin}/compliance/${link.token}`
+                    : `/compliance/${link.token}`;
+
+                  return (
+                    <div
+                      key={link.id}
+                      className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Link2 className="size-3.5 text-emerald-600 shrink-0" />
+                          <p className="text-sm font-mono truncate text-muted-foreground">
+                            {shareUrl}
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 ps-5">
+                          {tCompliance('created')}: {new Date(link.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => handleCopyLink(link.token, link.id)}
+                        >
+                          {copiedId === link.id ? (
+                            <Check className="size-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                        </Button>
+                        <a
+                          href={`/compliance/${link.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="ghost" size="icon" className="size-8">
+                            <ExternalLink className="size-3.5" />
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Quick Links */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">{t('quickLinks')}</h2>
+        <div className="grid gap-4 sm:grid-cols-1">
+          {/* Locations */}
+          <Link href="/settings/locations">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
+                    <MapPin className="size-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{t('locations')}</p>
+                    <p className="text-sm text-muted-foreground">{t('locationsDescription')}</p>
+                  </div>
+                  <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          {/* Billing */}
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
+                  <CreditCard className="size-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{t('billing')}</p>
+                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                      {t('comingSoon')}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{t('billingDescription')}</p>
+                </div>
+                <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

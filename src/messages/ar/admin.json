@@ -1,0 +1,26 @@
+{
+  "title": "لوحة تحكم الإدارة",
+  "auditLog": "سجل التدقيق",
+  "stats": {
+    "totalLicenses": "إجمالي التراخيص",
+    "totalUsers": "إجمالي المستخدمين",
+    "complianceRate": "معدل الامتثال",
+    "avgRenewalTime": "متوسط وقت التجديد"
+  },
+  "statusDistribution": "توزيع حالات التراخيص",
+  "statusBreakdown": "تفصيل حالات التراخيص",
+  "recentActivity": "النشاط الأخير",
+  "noActivity": "لا يوجد نشاط أخير",
+  "accessDenied": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
+  "active": "نشط",
+  "expiringSoon": "ينتهي قريباً",
+  "expired": "منتهي",
+  "action": "الإجراء",
+  "entity": "الكيان",
+  "details": "التفاصيل",
+  "by": "بواسطة",
+  "complianceTrend": "اتجاه الامتثال",
+  "complianceTrendDesc": "معدل الامتثال خلال الستة أشهر الأخيرة",
+  "licenseDistribution": "توزيع التراخيص حسب النوع",
+  "licenseDistributionDesc": "عدد التراخيص مصنفة حسب النوع"
+}

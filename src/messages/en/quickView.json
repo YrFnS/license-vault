@@ -1,0 +1,7 @@
+{
+  "description": "Quick view details for {name}",
+  "renewButton": "Renew",
+  "viewFullDetails": "View Full Details",
+  "expiresIn": "Expires in {days} days",
+  "expiredAgo": "Expired {days} days ago"
+}

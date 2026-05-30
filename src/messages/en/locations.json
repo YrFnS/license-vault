@@ -1,0 +1,17 @@
+{
+  "title": "Locations",
+  "subtitle": "Manage your business locations and service areas",
+  "addNew": "Add Location",
+  "edit": "Edit Location",
+  "delete": "Delete Location",
+  "deleteConfirm": "Are you sure you want to delete this location?",
+  "name": "Location Name",
+  "namePlaceholder": "e.g., Main Office",
+  "city": "City",
+  "cityPlaceholder": "e.g., Los Angeles",
+  "state": "State",
+  "zip": "ZIP Code",
+  "zipPlaceholder": "e.g., 90001",
+  "noLocations": "No locations yet. Add your first location.",
+  "licenseCount": "{count} license{plural}"
+}

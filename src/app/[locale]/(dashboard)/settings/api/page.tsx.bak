@@ -1,0 +1,786 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
+import {
+  Key,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  Webhook,
+  Send,
+  ExternalLink,
+  Shield,
+  Clock,
+  AlertTriangle,
+  Code2,
+  Terminal,
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+
+interface ApiKeyData {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+interface WebhookData {
+  id: string;
+  name: string;
+  url: string;
+  events: string;
+  secret: string;
+  active: boolean;
+  lastSentAt: string | null;
+  failCount: number;
+  createdAt: string;
+}
+
+const WEBHOOK_EVENTS = [
+  { id: 'license.expired', label: 'License Expired' },
+  { id: 'license.expiring', label: 'License Expiring' },
+  { id: 'license.created', label: 'License Created' },
+  { id: 'license.updated', label: 'License Updated' },
+  { id: 'license.renewed', label: 'License Renewed' },
+  { id: 'insurance.expired', label: 'Insurance Expired' },
+  { id: 'insurance.expiring', label: 'Insurance Expiring' },
+  { id: 'project.compliance_change', label: 'Project Compliance Change' },
+  { id: 'subcontractor.compliance_change', label: 'Subcontractor Compliance Change' },
+];
+
+export default function ApiSettingsPage() {
+  const t = useTranslations('apiSettings');
+  const tc = useTranslations('common');
+
+  // API Keys state
+  const [apiKeys, setApiKeys] = useState<ApiKeyData[]>([]);
+  const [showCreateKey, setShowCreateKey] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyPermissions, setNewKeyPermissions] = useState('read');
+  const [newKeyExpiry, setNewKeyExpiry] = useState('');
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null);
+
+  // Webhooks state
+  const [webhooks, setWebhooks] = useState<WebhookData[]>([]);
+  const [showCreateWebhook, setShowCreateWebhook] = useState(false);
+  const [showEditWebhook, setShowEditWebhook] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState<WebhookData | null>(null);
+  const [webhookForm, setWebhookForm] = useState({
+    name: '',
+    url: '',
+    events: [] as string[],
+    active: true,
+  });
+  const [deleteWebhookId, setDeleteWebhookId] = useState<string | null>(null);
+  const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
+
+  const fetchApiKeys = useCallback(async () => {
+    try {
+      const res = await fetch('/api/api-keys');
+      if (res.ok) {
+        const data = await res.json();
+        setApiKeys(data.keys || []);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchWebhooks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/webhooks');
+      if (res.ok) {
+        const data = await res.json();
+        setWebhooks(data.webhooks || []);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    fetchApiKeys();
+    fetchWebhooks();
+  }, [fetchApiKeys, fetchWebhooks]);
+
+  // API Key actions
+  const handleCreateKey = async () => {
+    if (!newKeyName) return;
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newKeyName,
+          permissions: newKeyPermissions,
+          expiresAt: newKeyExpiry || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCreatedKey(data.key);
+        setNewKeyName('');
+        setNewKeyPermissions('read');
+        setNewKeyExpiry('');
+        fetchApiKeys();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || t('createKeyError'));
+      }
+    } catch {
+      toast.error(t('createKeyError'));
+    }
+  };
+
+  const handleDeleteKey = async () => {
+    if (!deleteKeyId) return;
+    try {
+      const res = await fetch(`/api/api-keys/${deleteKeyId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success(t('keyRevoked'));
+        setDeleteKeyId(null);
+        fetchApiKeys();
+      }
+    } catch {
+      toast.error(t('revokeKeyError'));
+    }
+  };
+
+  const copyKey = () => {
+    if (createdKey) {
+      navigator.clipboard.writeText(createdKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  // Webhook actions
+  const handleCreateWebhook = async () => {
+    if (!webhookForm.name || !webhookForm.url || webhookForm.events.length === 0) return;
+    try {
+      const res = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: webhookForm.name,
+          url: webhookForm.url,
+          events: webhookForm.events.join(','),
+          active: webhookForm.active,
+        }),
+      });
+      if (res.ok) {
+        toast.success(t('webhookCreated'));
+        setShowCreateWebhook(false);
+        resetWebhookForm();
+        fetchWebhooks();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || t('createWebhookError'));
+      }
+    } catch {
+      toast.error(t('createWebhookError'));
+    }
+  };
+
+  const handleUpdateWebhook = async () => {
+    if (!editingWebhook) return;
+    try {
+      const res = await fetch(`/api/webhooks/${editingWebhook.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: webhookForm.name,
+          url: webhookForm.url,
+          events: webhookForm.events.join(','),
+          active: webhookForm.active,
+        }),
+      });
+      if (res.ok) {
+        toast.success(t('webhookUpdated'));
+        setShowEditWebhook(false);
+        setEditingWebhook(null);
+        resetWebhookForm();
+        fetchWebhooks();
+      } else {
+        toast.error(t('updateWebhookError'));
+      }
+    } catch {
+      toast.error(t('updateWebhookError'));
+    }
+  };
+
+  const handleDeleteWebhook = async () => {
+    if (!deleteWebhookId) return;
+    try {
+      const res = await fetch(`/api/webhooks/${deleteWebhookId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success(t('webhookDeleted'));
+        setDeleteWebhookId(null);
+        fetchWebhooks();
+      }
+    } catch {
+      toast.error(t('deleteWebhookError'));
+    }
+  };
+
+  const handleTestWebhook = async (webhookId: string) => {
+    setTestingWebhookId(webhookId);
+    try {
+      const res = await fetch(`/api/webhooks/${webhookId}/test`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          toast.success(t('testSuccess'));
+        } else {
+          toast.error(t('testFailed') + (data.error ? `: ${data.error}` : ''));
+        }
+      } else {
+        toast.error(t('testFailed'));
+      }
+    } catch {
+      toast.error(t('testFailed'));
+    } finally {
+      setTestingWebhookId(null);
+    }
+  };
+
+  const resetWebhookForm = () => {
+    setWebhookForm({ name: '', url: '', events: [], active: true });
+  };
+
+  const openEditWebhook = (webhook: WebhookData) => {
+    setWebhookForm({
+      name: webhook.name,
+      url: webhook.url,
+      events: webhook.events.split(',').filter(Boolean),
+      active: webhook.active,
+    });
+    setEditingWebhook(webhook);
+    setShowEditWebhook(true);
+  };
+
+  const toggleEvent = (eventId: string) => {
+    setWebhookForm((prev) => ({
+      ...prev,
+      events: prev.events.includes(eventId)
+        ? prev.events.filter((e) => e !== eventId)
+        : [...prev.events, eventId],
+    }));
+  };
+
+  const getPermissionBadge = (perm: string) => {
+    switch (perm) {
+      case 'admin':
+        return <Badge className="bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400">{t('permAdmin')}</Badge>;
+      case 'write':
+        return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">{t('permWrite')}</Badge>;
+      case 'read':
+      default:
+        return <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">{t('permRead')}</Badge>;
+    }
+  };
+
+  const curlExamples = [
+    {
+      title: t('curlListLicenses'),
+      cmd: `curl -H "Authorization: Bearer YOUR_API_KEY" \\\n  https://your-domain.com/api/v1/licenses`,
+    },
+    {
+      title: t('curlGetLicense'),
+      cmd: `curl -H "Authorization: Bearer YOUR_API_KEY" \\\n  https://your-domain.com/api/v1/licenses/LICENSE_ID`,
+    },
+    {
+      title: t('curlCompliance'),
+      cmd: `curl -H "Authorization: Bearer YOUR_API_KEY" \\\n  https://your-domain.com/api/v1/compliance`,
+    },
+    {
+      title: t('curlProjects'),
+      cmd: `curl -H "Authorization: Bearer YOUR_API_KEY" \\\n  https://your-domain.com/api/v1/projects`,
+    },
+  ];
+
+  return (
+    <div className="space-y-8">
+      {/* Gradient Header */}
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-700 via-slate-800 to-emerald-900 p-6 text-white shadow-lg">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
+        <div className="absolute -top-12 -end-12 size-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-8 -start-8 size-32 rounded-full bg-emerald-500/10 blur-xl" />
+        <div className="relative flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-white/20 backdrop-blur-sm shadow-lg">
+            <Key className="size-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t('title')}</h1>
+            <p className="text-white/75 text-sm mt-0.5">{t('subtitle')}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 1: API Keys */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Key className="size-5 text-emerald-600 dark:text-emerald-400" />
+                {t('apiKeys')}
+              </CardTitle>
+              <CardDescription className="mt-1">{t('apiKeysDesc')}</CardDescription>
+            </div>
+            <Button
+              onClick={() => setShowCreateKey(true)}
+              size="sm"
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+            >
+              <Plus className="size-4 me-1" />
+              {t('createKey')}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {apiKeys.length === 0 ? (
+            <div className="text-center py-8">
+              <Key className="size-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground">{t('noApiKeys')}</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">{t('noApiKeysDesc')}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {apiKeys.map((key) => (
+                <div
+                  key={key.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors border-s-4 border-s-emerald-300 dark:border-s-emerald-700"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{key.name}</span>
+                      {getPermissionBadge(key.permissions)}
+                      {!key.active && <Badge variant="secondary">{t('inactive')}</Badge>}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                      <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs border border-border/30">{key.keyPrefix}••••••••</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3" />
+                        {key.lastUsedAt ? t('lastUsed', { date: new Date(key.lastUsedAt).toLocaleDateString() }) : t('neverUsed')}
+                      </span>
+                      {key.expiresAt && (
+                        <span className={new Date(key.expiresAt) < new Date() ? 'text-red-500' : ''}>
+                          {t('expires', { date: new Date(key.expiresAt).toLocaleDateString() })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    onClick={() => setDeleteKeyId(key.id)}
+                  >
+                    <Trash2 className="size-4 me-1" />
+                    {t('revoke')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Created Key Dialog */}
+      <Dialog open={!!createdKey} onOpenChange={(open) => { if (!open) setCreatedKey(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="size-5 text-emerald-600" />
+              {t('keyCreated')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 p-3">
+              <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0" />
+                {t('keyCreatedWarning')}
+              </p>
+            </div>
+            <div className="relative">
+              <Input
+                readOnly
+                value={createdKey || ''}
+                className="font-mono text-xs pr-20"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="absolute end-1 top-1/2 -translate-y-1/2"
+                onClick={copyKey}
+              >
+                {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                <span className="ms-1 text-xs">{copied ? tc('common.close') : t('copy')}</span>
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setCreatedKey(null)} className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+              {t('done')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Section 2: Webhooks */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Webhook className="size-5 text-teal-600 dark:text-teal-400" />
+                {t('webhooks')}
+              </CardTitle>
+              <CardDescription className="mt-1">{t('webhooksDesc')}</CardDescription>
+            </div>
+            <Button
+              onClick={() => { resetWebhookForm(); setShowCreateWebhook(true); }}
+              size="sm"
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+            >
+              <Plus className="size-4 me-1" />
+              {t('addWebhook')}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {webhooks.length === 0 ? (
+            <div className="text-center py-8">
+              <Webhook className="size-10 mx-auto text-muted-foreground/40 mb-3" />
+              <p className="text-muted-foreground">{t('noWebhooks')}</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">{t('noWebhooksDesc')}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {webhooks.map((webhook) => (
+                <div
+                  key={webhook.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors border-s-4 border-s-teal-300 dark:border-s-teal-700"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{webhook.name}</span>
+                      {webhook.active ? (
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">{t('active')}</Badge>
+                      ) : (
+                        <Badge variant="secondary">{t('inactive')}</Badge>
+                      )}
+                      {webhook.failCount > 0 && (
+                        <Badge className="bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400">
+                          <AlertTriangle className="size-3 me-1" />{webhook.failCount} {t('failures')}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                      <span className="font-mono truncate max-w-[200px]">{webhook.url}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {webhook.events.split(',').filter(Boolean).map((evt) => (
+                          <span key={evt} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-400 border border-teal-200 dark:border-teal-800">{evt}</span>
+                        ))}
+                      </div>
+                      {webhook.lastSentAt && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="size-3" />
+                          {t('lastSent', { date: new Date(webhook.lastSentAt).toLocaleDateString() })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                      onClick={() => handleTestWebhook(webhook.id)}
+                      disabled={testingWebhookId === webhook.id}
+                    >
+                      <Send className="size-3.5 me-1" />
+                      {testingWebhookId === webhook.id ? t('testing') : t('test')}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => openEditWebhook(webhook)}>
+                      {tc('edit')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleteWebhookId(webhook.id)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 3: API Documentation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Code2 className="size-5 text-emerald-600 dark:text-emerald-400" />
+            {t('apiDocs')}
+          </CardTitle>
+          <CardDescription>{t('apiDocsDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Endpoints */}
+          <div>
+            <h3 className="text-sm font-semibold mb-3">{t('availableEndpoints')}</h3>
+            <div className="space-y-2">
+              {[
+                { method: 'GET', path: '/api/v1/licenses', desc: t('endpointListLicenses') },
+                { method: 'GET', path: '/api/v1/licenses/:id', desc: t('endpointGetLicense') },
+                { method: 'GET', path: '/api/v1/compliance', desc: t('endpointCompliance') },
+                { method: 'GET', path: '/api/v1/projects', desc: t('endpointProjects') },
+              ].map((ep) => (
+                <div key={ep.path} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 text-sm">
+                  <Badge className={`${
+                    ep.method === 'GET'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                      : 'bg-amber-100 text-amber-700'
+                  } font-mono text-xs`}>
+                    {ep.method}
+                  </Badge>
+                  <code className="font-mono text-xs flex-1">{ep.path}</code>
+                  <span className="text-muted-foreground text-xs hidden sm:inline">{ep.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Curl Examples */}
+          <div>
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Terminal className="size-4" />
+              {t('exampleRequests')}
+            </h3>
+            <div className="space-y-3">
+              {curlExamples.map((ex) => (
+                <div key={ex.title} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">{ex.title}</p>
+                  <pre className="bg-slate-950 text-slate-100 rounded-lg p-3 text-xs font-mono overflow-x-auto border border-slate-800 shadow-inner">
+                    <span className="text-emerald-400">curl</span> <span className="text-amber-300">-H</span> <span className="text-teal-300">&quot;Authorization: Bearer YOUR_API_KEY&quot;</span> <span className="text-slate-500">\</span>{'\n  '}
+                    <span className="text-sky-300">https://your-domain.com{ex.cmd.includes('/licenses/LICENSE_ID') ? '/api/v1/licenses/LICENSE_ID' : ex.cmd.includes('/compliance') ? '/api/v1/compliance' : ex.cmd.includes('/projects') ? '/api/v1/projects' : '/api/v1/licenses'}</span>
+                  </pre>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Webhook Events */}
+          <div>
+            <h3 className="text-sm font-semibold mb-3">{t('webhookEvents')}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {WEBHOOK_EVENTS.map((evt) => (
+                <div key={evt.id} className="flex items-center gap-2 text-sm p-2 rounded-lg bg-muted/30">
+                  <code className="font-mono text-xs text-emerald-600 dark:text-emerald-400">{evt.id}</code>
+                  <span className="text-muted-foreground text-xs">— {evt.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Create API Key Dialog */}
+      <Dialog open={showCreateKey} onOpenChange={setShowCreateKey}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('createNewKey')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>{t('keyName')} *</Label>
+              <Input
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder={t('keyNamePlaceholder')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('permissions')}</Label>
+              <Select value={newKeyPermissions} onValueChange={setNewKeyPermissions}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read">{t('permRead')}</SelectItem>
+                  <SelectItem value="write">{t('permWrite')}</SelectItem>
+                  <SelectItem value="admin">{t('permAdmin')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('expiryDate')}</Label>
+              <Input
+                type="date"
+                value={newKeyExpiry}
+                onChange={(e) => setNewKeyExpiry(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t('expiryOptional')}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateKey(false)}>{tc('cancel')}</Button>
+            <Button onClick={handleCreateKey} disabled={!newKeyName} className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+              {t('createKey')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Webhook Dialog */}
+      <Dialog open={showCreateWebhook || showEditWebhook} onOpenChange={(open) => {
+        if (!open) {
+          setShowCreateWebhook(false);
+          setShowEditWebhook(false);
+          setEditingWebhook(null);
+          resetWebhookForm();
+        }
+      }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingWebhook ? t('editWebhook') : t('createWebhook')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>{t('webhookName')} *</Label>
+              <Input
+                value={webhookForm.name}
+                onChange={(e) => setWebhookForm({ ...webhookForm, name: e.target.value })}
+                placeholder={t('webhookNamePlaceholder')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('webhookUrl')} *</Label>
+              <Input
+                value={webhookForm.url}
+                onChange={(e) => setWebhookForm({ ...webhookForm, url: e.target.value })}
+                placeholder="https://example.com/webhook"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('events')}</Label>
+              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                {WEBHOOK_EVENTS.map((evt) => (
+                  <label key={evt.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={webhookForm.events.includes(evt.id)}
+                      onChange={() => toggleEvent(evt.id)}
+                      className="rounded"
+                    />
+                    <span className="font-mono text-xs">{evt.id}</span>
+                    <span className="text-muted-foreground text-xs">({evt.label})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={webhookForm.active}
+                onCheckedChange={(checked) => setWebhookForm({ ...webhookForm, active: checked })}
+              />
+              <Label>{t('active')}</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowCreateWebhook(false); setShowEditWebhook(false); setEditingWebhook(null); resetWebhookForm(); }}>
+              {tc('cancel')}
+            </Button>
+            <Button
+              onClick={editingWebhook ? handleUpdateWebhook : handleCreateWebhook}
+              disabled={!webhookForm.name || !webhookForm.url || webhookForm.events.length === 0}
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+            >
+              {editingWebhook ? tc('save') : t('createWebhook')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Key Confirmation */}
+      <AlertDialog open={!!deleteKeyId} onOpenChange={() => setDeleteKeyId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('revokeKeyTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('revokeKeyWarning')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteKey} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {t('revoke')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Webhook Confirmation */}
+      <AlertDialog open={!!deleteWebhookId} onOpenChange={() => setDeleteWebhookId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('deleteWebhookTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('deleteWebhookWarning')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteWebhook} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {tc('delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

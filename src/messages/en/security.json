@@ -1,0 +1,73 @@
+{
+  "title": "Security & Hardening",
+  "description": "Monitor and configure application security settings",
+  "rateLimiting": {
+    "title": "Rate Limiting",
+    "description": "API request throttling configuration",
+    "apiLimit": "API Endpoints",
+    "authLimit": "Authentication",
+    "publicApiLimit": "Public API",
+    "requestsPerMinute": "requests/min",
+    "active": "Active",
+    "windowMs": "Window",
+    "maxRequests": "Max Requests"
+  },
+  "headers": {
+    "title": "Security Headers",
+    "description": "HTTP security headers configuration",
+    "xContentType": "X-Content-Type-Options",
+    "xFrameOptions": "X-Frame-Options",
+    "xXssProtection": "X-XSS-Protection",
+    "referrerPolicy": "Referrer-Policy",
+    "permissionsPolicy": "Permissions-Policy",
+    "contentSecurity": "Content-Security-Policy",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "csrf": {
+    "title": "CSRF Protection",
+    "description": "Cross-Site Request Forgery prevention",
+    "status": "Status",
+    "tokensGenerated": "Tokens Generated",
+    "tokensValidated": "Tokens Validated",
+    "failures": "Failed Validations"
+  },
+  "backups": {
+    "title": "Database Backups",
+    "description": "Automated and manual database backup management",
+    "createBackup": "Create Backup Now",
+    "creating": "Creating backup...",
+    "autoBackup": "Auto Backup",
+    "schedule": "Schedule",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "disabled": "Disabled",
+    "lastBackup": "Last Backup",
+    "fileName": "File Name",
+    "size": "Size",
+    "created": "Created",
+    "noBackups": "No backups yet",
+    "createFirst": "Create your first backup to protect your data",
+    "success": "Backup created successfully",
+    "error": "Failed to create backup"
+  },
+  "audit": {
+    "title": "Security Audit Log",
+    "description": "Recent security events and incidents",
+    "noEvents": "No security events recorded",
+    "event": "Event",
+    "details": "Details",
+    "timestamp": "Time",
+    "failedAuth": "Failed Authentication",
+    "rateLimitHit": "Rate Limit Exceeded",
+    "csrfFailure": "CSRF Validation Failed",
+    "xssAttempt": "XSS Attempt Detected"
+  },
+  "sanitization": {
+    "title": "Input Sanitization",
+    "description": "Input validation and XSS prevention statistics",
+    "inputsSanitized": "Inputs Sanitized",
+    "xssBlocked": "XSS Attempts Blocked",
+    "sqlInjectionBlocked": "SQL Injection Attempts Blocked"
+  }
+}

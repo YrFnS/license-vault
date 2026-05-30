@@ -1,0 +1,17 @@
+{
+  "title": "تقرير الامتثال للترخيص",
+  "generatedOn": "تم الإنشاء في {date}",
+  "licenseDetails": "تفاصيل الترخيص",
+  "statusSection": "حالة الامتثال",
+  "renewalHistorySection": "سجل التجديد",
+  "printReport": "طباعة التقرير",
+  "exportReport": "تصدير التقرير",
+  "backToLicense": "العودة للترخيص",
+  "poweredBy": "بدعم من LicenseVault",
+  "scanToVerify": "امسح للتحقق من الأصالة",
+  "noRenewalHistory": "لا يوجد سجل تجديد",
+  "organizationInfo": "معلومات المؤسسة",
+  "complianceSummary": "ملخص الامتثال",
+  "downloadPdf": "تحميل PDF",
+  "generatingPdf": "جاري التوليد..."
+}

@@ -1,0 +1,14 @@
+{
+  "title": "خريطة التبادل",
+  "description": "تحقق من تبادل التراخيص بين الولايات",
+  "selectSourceState": "ولاية ترخيصك",
+  "selectTargetState": "الولاية التي تريد العمل فيها",
+  "checkReciprocity": "التحقق من التبادل",
+  "reciprocityExists": "التبادل متاح!",
+  "noReciprocity": "لم يتم العثور على اتفاقية تبادل",
+  "coveredTypes": "أنواع التراخيص المشمولة",
+  "nasclaNote": "اختبار NASCLA مقبول في هذه الولاية",
+  "additionalRequirements": "قد تنطبق متطلبات إضافية",
+  "boardContact": "اتصل باللجنة",
+  "statesWithReciprocity": "ولايات ذات تبادل"
+}

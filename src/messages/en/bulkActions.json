@@ -1,0 +1,12 @@
+{
+  "selectMode": "Select",
+  "cancelSelect": "Cancel",
+  "selected": "{count} selected",
+  "deleteSelected": "Delete Selected",
+  "exportSelected": "Export Selected",
+  "deleteConfirm": "Are you sure you want to delete {count} license{plural}?",
+  "deleteSuccess": "{count} license{plural} deleted successfully",
+  "deleteError": "Failed to delete some licenses",
+  "selectAll": "Select All",
+  "deselectAll": "Deselect All"
+}

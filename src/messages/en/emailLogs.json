@@ -1,0 +1,22 @@
+{
+  "title": "Email Logs",
+  "description": "View sent email history and delivery status",
+  "refresh": "Refresh",
+  "filters": "Filters",
+  "searchPlaceholder": "Search emails...",
+  "allTypes": "All Types",
+  "allStatuses": "All Statuses",
+  "noEmails": "No emails found",
+  "noEmailsDesc": "Email logs will appear here when emails are sent.",
+  "recipient": "Recipient",
+  "subject": "Subject",
+  "type": "Type",
+  "status": "Status",
+  "date": "Date",
+  "statusSent": "Sent",
+  "statusFailed": "Failed",
+  "showing": "Showing",
+  "of": "of",
+  "previous": "Previous",
+  "next": "Next"
+}

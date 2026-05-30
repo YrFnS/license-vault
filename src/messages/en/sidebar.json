@@ -1,0 +1,10 @@
+{
+  "main": "Main",
+  "tools": "Tools",
+  "management": "Management",
+  "helpSupport": "Help & Support",
+  "helpSupportTooltip": "Visit our help center for guides and support",
+  "insurance": "Insurance & Bonds",
+  "ceTracking": "CE Tracking",
+  "stateRequirements": "State Requirements"
+}

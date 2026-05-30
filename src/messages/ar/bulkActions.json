@@ -1,0 +1,12 @@
+{
+  "selectMode": "تحديد",
+  "cancelSelect": "إلغاء",
+  "selected": "{count} محدد",
+  "deleteSelected": "حذف المحدد",
+  "exportSelected": "تصدير المحدد",
+  "deleteConfirm": "هل أنت متأكد من حذف {count} ترخيص{plural}؟",
+  "deleteSuccess": "تم حذف {count} ترخيص{plural} بنجاح",
+  "deleteError": "فشل حذف بعض التراخيص",
+  "selectAll": "تحديد الكل",
+  "deselectAll": "إلغاء تحديد الكل"
+}

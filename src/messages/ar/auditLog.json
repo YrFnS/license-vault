@@ -1,0 +1,18 @@
+{
+  "title": "سجل التدقيق",
+  "subtitle": "تتبع جميع التغييرات والأنشطة في مؤسستك",
+  "date": "التاريخ/الوقت",
+  "action": "الإجراء",
+  "entity": "الكيان",
+  "details": "التفاصيل",
+  "user": "المستخدم",
+  "filterAll": "جميع الإجراءات",
+  "filterCreate": "إنشاء",
+  "filterUpdate": "تحديث",
+  "filterDelete": "حذف",
+  "searchPlaceholder": "البحث في سجل التدقيق...",
+  "noLogs": "لم يتم العثور على سجلات تدقيق",
+  "loadMore": "تحميل المزيد",
+  "showing": "عرض {count} من {total} إدخال",
+  "system": "النظام"
+}

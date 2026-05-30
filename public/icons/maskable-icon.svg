@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="maskShieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d9488;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="maskInnerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#047857;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Solid background for maskable (safe area padding ~10%) -->
+  <rect width="512" height="512" fill="#0f172a" />
+  <!-- Shield shape centered with safe area -->
+  <g transform="translate(56, 56) scale(0.78)">
+    <path d="M256 32 L48 128 L48 256 C48 370 140 472 256 496 C372 472 464 370 464 256 L464 128 Z" fill="url(#maskShieldGrad)" />
+    <path d="M256 64 L80 144 L80 256 C80 354 156 440 256 462 C356 440 432 354 432 256 L432 144 Z" fill="url(#maskInnerGrad)" opacity="0.5" />
+    <!-- Checkmark -->
+    <path d="M192 256 L240 304 L320 208" stroke="white" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  </g>
+</svg>

@@ -1,0 +1,17 @@
+{
+  "title": "License Compliance Report",
+  "generatedOn": "Generated on {date}",
+  "licenseDetails": "License Details",
+  "statusSection": "Compliance Status",
+  "renewalHistorySection": "Renewal History",
+  "printReport": "Print Report",
+  "exportReport": "Export Report",
+  "backToLicense": "Back to License",
+  "poweredBy": "Powered by LicenseVault",
+  "scanToVerify": "Scan to verify authenticity",
+  "noRenewalHistory": "No renewal history on file",
+  "organizationInfo": "Organization Information",
+  "complianceSummary": "Compliance Summary",
+  "downloadPdf": "Download PDF",
+  "generatingPdf": "Generating..."
+}

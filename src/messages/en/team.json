@@ -1,0 +1,31 @@
+{
+  "title": "Team",
+  "invite": "Invite Member",
+  "inviteEmail": "Email Address",
+  "inviteEmailPlaceholder": "colleague@company.com",
+  "inviteRole": "Role",
+  "inviteSuccess": "Invitation sent successfully",
+  "inviteError": "Failed to send invitation",
+  "roles": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "member": "Member"
+  },
+  "pending": "Pending",
+  "pendingInvites": "Pending Invitations",
+  "members": "Members",
+  "removeConfirm": "Are you sure you want to remove this member?",
+  "noMembers": "No team members yet.",
+  "joined": "Joined",
+  "invited": "Invited",
+  "cancelInvite": "Cancel Invite",
+  "resendInvite": "Resend Invite",
+  "removeMember": "Remove Member",
+  "removeSuccess": "Member removed successfully",
+  "changeRole": "Change Role",
+  "roleChangeSuccess": "Role updated successfully",
+  "saveRole": "Save Role",
+  "cancelSuccess": "Invitation cancelled successfully",
+  "resendSuccess": "Invitation resent successfully",
+  "cancelConfirm": "Are you sure you want to cancel this invitation?"
+}

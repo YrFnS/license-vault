@@ -1,0 +1,1059 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  password            String
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizations  OrgMember[]
+  alertPrefs     AlertPreference[]
+  notifications  Notification[]
+  resetTokens    PasswordResetToken[]
+}
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  tradeType     String   @default("general")
+  primaryState  String   @default("CA")
+  plan          String   @default("free")
+  parentId      String?
+  logoUrl       String?
+  primaryColor  String?  @default("#10b981")
+  companyName   String?
+  brandingConfig String? // JSON: { customLogo, customColors, customFavicon, loginMessage }
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  parent        Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id])
+  subsidiaries  Organization[] @relation("OrgHierarchy")
+  members          OrgMember[]
+  licenses         License[]
+  locations        Location[]
+  auditLogs        AuditLog[]
+  complianceShares ComplianceShare[]
+  licenseDocuments LicenseDocument[]
+  ceTrackings      CETracking[]
+  insuranceBonds   InsuranceBond[]
+  qualifiers       Qualifier[]
+  projects         Project[]
+  subcontractors       Subcontractor[]
+  subcontractorDocuments SubcontractorDocument[]
+  emailLogs             EmailLog[]
+  approvalWorkflows ApprovalWorkflow[]
+  apiKeys          ApiKey[]
+  webhooks         Webhook[]
+  automationRuns   AutomationRun[]
+  automationSettings AutomationSetting?
+  licenseApplications      LicenseApplication[]
+  checklistTemplates       ChecklistTemplate[]
+  checklistInstances       ChecklistInstance[]
+  documentScans    DocumentScan[]
+  exams            ExamTracking[]
+  businessEntities BusinessEntity[]
+  workflowDefinitions WorkflowDefinition[]
+  workflowInstances  WorkflowInstance[]
+  regulatoryAlerts   RegulatoryAlert[]
+  regulatoryWatches  RegulatoryWatch[]
+  generatedDocuments GeneratedDocument[]
+  signatureRequests  SignatureRequest[]
+  contractorDirectory ContractorDirectory[]
+  integrations        Integration[]
+  integrationSyncLogs IntegrationSyncLog[]
+  boardSubmissions    BoardSubmission[]
+  vendorScores        VendorScore[]
+  scheduledReports    ScheduledReport[]
+}
+
+model OrgMember {
+  id          String   @id @default(cuid())
+  orgId       String
+  userId      String?
+  email       String
+  fullName    String?
+  role        String   @default("member")
+  invitedAt   DateTime @default(now())
+  joinedAt    DateTime?
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, email])
+}
+
+model License {
+  id             String   @id @default(cuid())
+  orgId          String
+  name           String
+  type           String
+  licenseNumber  String
+  issuedBy       String
+  state          String?
+  issueDate      DateTime
+  expirationDate DateTime
+  notes          String?
+  isRenewed      Boolean  @default(false)
+  renewalDate     DateTime?
+  autoRenew       Boolean  @default(false)
+  renewalHistory  String?
+  locationId     String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  documents       LicenseDocument[]
+  ceTrackings     CETracking[]
+  qualifierLinks  QualifierLicense[]
+  projectLicenses ProjectLicense[]
+  entityLinks     EntityLicense[]
+
+  @@index([orgId])
+  @@index([expirationDate])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  city      String?
+  state     String?
+  zip       String?
+  createdAt DateTime @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model AlertPreference {
+  id                   String   @id @default(cuid())
+  orgId                String
+  userId               String
+  alert60Days          Boolean @default(true)
+  alert30Days          Boolean @default(true)
+  alert5Days           Boolean @default(true)
+  alertEmail           Boolean @default(true)
+  alertInApp           Boolean @default(true)
+  alertEmailFrequency  String  @default("immediate")
+  alertEmailCategories String  @default("all")
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  entityName  String?
+  details     String?
+  createdAt   DateTime @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model ComplianceShare {
+  id        String   @id @default(cuid())
+  orgId     String
+  token     String   @unique
+  createdBy String?
+  createdAt DateTime @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model AiChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LicenseDocument {
+  id          String   @id @default(cuid())
+  licenseId   String
+  orgId       String
+  fileName    String
+  fileType    String
+  fileSize    Int
+  filePath    String
+  category    String   @default("general")
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  license     License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+}
+
+model CETracking {
+  id            String   @id @default(cuid())
+  orgId         String
+  licenseId     String
+  courseName    String
+  provider      String
+  hoursEarned   Float
+  hoursRequired Float   @default(0)
+  completionDate DateTime
+  category      String   @default("general")
+  certificateUrl String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  license       License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([licenseId])
+}
+
+model InsuranceBond {
+  id              String   @id @default(cuid())
+  orgId           String
+  name            String
+  type            String   @default("insurance")
+  policyNumber    String
+  provider        String
+  coverageAmount  Float    @default(0)
+  premiumAmount   Float    @default(0)
+  issueDate       DateTime
+  expirationDate  DateTime
+  status          String   @default("active")
+  holderName      String?
+  beneficiaries   String?
+  documentUrl     String?
+  notes           String?
+  autoRenew       Boolean  @default(false)
+  additionalInsured    Boolean  @default(false)
+  primaryNoncontrib    Boolean  @default(false)
+  waiverSubrogation   Boolean  @default(false)
+  perOccurrenceLimit  Float    @default(0)
+  aggregateLimit      Float    @default(0)
+  deductible          Float    @default(0)
+  endorsementTypes    String?
+  requiredCoverage    Float    @default(0)
+  requiredPerOccurrence Float  @default(0)
+  requiredAggregate   Float    @default(0)
+  requiredEndorsements String?
+  complianceStatus    String   @default("pending")
+  lastVerified        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([expirationDate])
+}
+
+model StateRequirement {
+  id              String   @id @default(cuid())
+  state           String
+  licenseType     String
+  renewPeriodMonths Int    @default(24)
+  ceHoursRequired Float   @default(0)
+  renewalFeeMin   Float   @default(0)
+  renewalFeeMax   Float   @default(0)
+  bondRequired    Boolean @default(false)
+  bondAmountMin   Float   @default(0)
+  insuranceRequired Boolean @default(false)
+  boardName       String?
+  boardUrl        String?
+  boardPhone      String?
+  notes           String?
+  reciprocityStates String?
+  nasclaAccepted  Boolean @default(false)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([state, licenseType])
+}
+
+model Qualifier {
+  id              String   @id @default(cuid())
+  orgId           String
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  licenseNumber   String?
+  licenseState    String?
+  licenseType     String?
+  licenseExpiry   DateTime?
+  ceHoursEarned   Float    @default(0)
+  ceHoursRequired Float    @default(0)
+  status          String   @default("active")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  licenseLinks    QualifierLicense[]
+  exams           ExamTracking[]
+
+  @@index([orgId])
+}
+
+model QualifierLicense {
+  id          String   @id @default(cuid())
+  qualifierId String
+  licenseId   String
+  role        String   @default("qualifier")
+  assignedAt  DateTime @default(now())
+  qualifier   Qualifier @relation(fields: [qualifierId], references: [id], onDelete: Cascade)
+  license     License   @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([qualifierId, licenseId])
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  orgId           String
+  name            String
+  description     String?
+  clientName      String?
+  clientEmail     String?
+  location        String?
+  state           String?
+  startDate       DateTime?
+  endDate         DateTime?
+  status          String   @default("active")
+  requiredLicenses String?
+  requiredInsurance String?
+  complianceScore Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  projectLicenses ProjectLicense[]
+  projectSubs     ProjectSubcontractor[]
+
+  @@index([orgId])
+}
+
+model ProjectLicense {
+  id          String   @id @default(cuid())
+  projectId   String
+  licenseId   String
+  required    Boolean  @default(true)
+  verified    Boolean  @default(false)
+  verifiedAt  DateTime?
+  notes       String?
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  license     License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, licenseId])
+}
+
+model ProjectSubcontractor {
+  id              String   @id @default(cuid())
+  projectId       String
+  subcontractorId String
+  role            String?
+  complianceStatus String @default("pending")
+  lastChecked     DateTime?
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, subcontractorId])
+}
+
+model Subcontractor {
+  id               String    @id @default(cuid())
+  orgId            String
+  companyName      String
+  contactName      String?
+  email            String?
+  phone            String?
+  licenseNumber    String?
+  licenseState     String?
+  licenseExpiry    DateTime?
+  insuranceExpiry  DateTime?
+  insuranceStatus  String    @default("unknown")
+  complianceStatus String    @default("pending")
+  status           String    @default("active")
+  uploadToken      String?
+  portalToken      String?
+  portalExpiresAt  DateTime?
+  lastSubmittedAt  DateTime?
+  tradeType        String?
+  insuranceProvider String?
+  insuranceAmount  Float     @default(0)
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  projectSubs      ProjectSubcontractor[]
+  documents        SubcontractorDocument[]
+
+  @@index([orgId])
+  @@index([portalToken])
+}
+
+model ApprovalWorkflow {
+  id          String   @id @default(cuid())
+  orgId       String
+  title       String
+  description String?
+  type        String   @default("license_renewal")
+  status      String   @default("pending")
+  priority    String   @default("medium")
+  entityId    String?
+  entityType  String?
+  requestData String?
+  requestedBy String?
+  reviewedBy  String?
+  reviewNotes String?
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  keyHash     String
+  keyPrefix   String
+  permissions String   @default("read")
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([keyHash])
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  url         String
+  events      String
+  secret      String
+  isActive    Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  failureCount Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model AutomationRun {
+  id              String    @id @default(cuid())
+  orgId           String
+  type            String    @default("full_check")
+  status          String    @default("running")
+  results         String?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([startedAt])
+}
+
+model SubcontractorDocument {
+  id              String    @id @default(cuid())
+  subcontractorId String
+  orgId           String
+  fileName        String
+  fileType        String
+  fileSize        Int
+  filePath        String
+  category        String    @default("other")
+  reviewStatus    String    @default("pending")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  createdAt       DateTime  @default(now())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([subcontractorId])
+  @@index([orgId])
+}
+
+model EmailLog {
+  id         String    @id @default(cuid())
+  orgId      String
+  to         String
+  subject    String
+  status     String    @default("pending")
+  provider   String    @default("smtp")
+  providerId String?
+  error      String?
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model AutomationSetting {
+  id              String    @id @default(cuid())
+  orgId           String
+  enabled         Boolean   @default(true)
+  checkFrequency  String    @default("daily")
+  escalationDays  Int       @default(7)
+  notifyExpired   Boolean   @default(true)
+  notifyExpiring  Boolean   @default(true)
+  notifyInsurance Boolean   @default(true)
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId])
+}
+
+model LicenseApplication {
+  id              String   @id @default(cuid())
+  orgId           String
+  userId          String?
+  licenseType     String
+  state           String
+  applicantName   String
+  businessName    String?
+  applicationType String   @default("new")
+  status          String   @default("draft")
+  boardName       String?
+  boardUrl        String?
+  submittedDate   DateTime?
+  targetDate      DateTime?
+  estimatedCost   Float    @default(0)
+  actualCost      Float    @default(0)
+  notes           String?
+  denialReason    String?
+  checklistData   String?
+  formData        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  documents       LicenseApplicationDocument[]
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model LicenseApplicationDocument {
+  id              String   @id @default(cuid())
+  applicationId   String
+  fileName        String
+  fileType        String
+  fileSize        Int
+  filePath        String
+  category        String   @default("general")
+  required        Boolean  @default(false)
+  uploadedAt      DateTime @default(now())
+
+  application     LicenseApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  description String?
+  category    String   @default("general")
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  items       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  instances   ChecklistInstance[]
+
+  @@index([orgId])
+}
+
+model ChecklistInstance {
+  id             String   @id @default(cuid())
+  orgId          String
+  templateId     String
+  entityType     String
+  entityId       String?
+  title          String
+  status         String   @default("in_progress")
+  items          String
+  completedCount Int      @default(0)
+  totalCount     Int      @default(0)
+  dueDate        DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  template       ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([entityType, entityId])
+}
+
+model DocumentScan {
+  id            String   @id @default(cuid())
+  orgId         String
+  userId        String
+  fileName      String
+  fileType      String
+  fileSize      Int
+  documentType  String   @default("auto")
+  extractedData String   // JSON string of extraction results
+  rawText       String?
+  confidence    Float    @default(0)
+  status        String   @default("completed")
+  createdAt     DateTime @default(now())
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model ExamTracking {
+  id              String   @id @default(cuid())
+  orgId           String
+  qualifierId     String?
+  examType        String    // nascla_general, nascla_electrical, nascla_plumbing, nascla_hvac, state_specific, trade_exam
+  examName        String
+  examProvider    String?
+  state           String?
+  status          String    @default("scheduled") // scheduled, passed, failed, expired, cancelled
+  examDate        DateTime?
+  score           Float?
+  passingScore    Float?
+  resultsReceived DateTime?
+  registrationId  String?
+  studyHours      Float     @default(0)
+  notes           String?
+  certificateUrl  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  qualifier       Qualifier?   @relation(fields: [qualifierId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([examType])
+  @@index([status])
+}
+
+model BusinessEntity {
+  id                String   @id @default(cuid())
+  orgId             String
+  name              String
+  entityType        String   @default("llc") // llc, corporation, sole_proprietor, partnership, llp
+  formationState    String?
+  formationDate     DateTime?
+  ein               String?
+  registeredAgent   String?
+  registeredAgentState String?
+  entityStatus      String   @default("active") // active, dissolved, suspended, revoked
+  annualReportDue   DateTime?
+  annualReportFiled DateTime?
+  franchiseTaxDue   DateTime?
+  franchiseTaxPaid  DateTime?
+  complianceScore   Float    @default(100)
+  notes             String?
+  parentId          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  org               Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parent            BusinessEntity? @relation("EntityHierarchy", fields: [parentId], references: [id])
+  subsidiaries      BusinessEntity[] @relation("EntityHierarchy")
+  licenses          EntityLicense[]
+
+  @@index([orgId])
+  @@index([entityStatus])
+}
+
+model EntityLicense {
+  id          String   @id @default(cuid())
+  entityId    String
+  licenseId   String
+  role        String   @default("holder") // holder, qualifier, additional
+  createdAt   DateTime @default(now())
+
+  entity      BusinessEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  license     License        @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, licenseId])
+}
+
+model WorkflowDefinition {
+  id            String   @id @default(cuid())
+  orgId         String
+  name          String
+  description   String?
+  category      String   @default("custom") // license_renewal, onboarding, audit, document_review, custom
+  triggerType   String   @default("manual") // manual, automatic, scheduled, event
+  triggerConfig String?  // JSON: { event, conditions, schedule }
+  steps         String   // JSON: [{id, name, type, assignee, actions, conditions, order}]
+  isActive      Boolean  @default(true)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  instances   WorkflowInstance[]
+
+  @@index([orgId])
+  @@index([category])
+}
+
+model WorkflowInstance {
+  id             String    @id @default(cuid())
+  orgId          String
+  definitionId   String
+  entityType     String    // license, application, document, subcontractor
+  entityId       String?
+  currentStep    Int       @default(0)
+  status         String    @default("active") // active, completed, cancelled, failed
+  stepHistory    String?   // JSON: [{stepId, stepName, action, userId, timestamp, notes}]
+  variables      String?   // JSON: workflow variables for conditions
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  org            Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  definition     WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+  @@index([definitionId])
+}
+
+model RegulatoryAlert {
+  id            String   @id @default(cuid())
+  orgId         String
+  state         String
+  licenseType   String?
+  title         String
+  description   String
+  changeType    String   @default("update") // new_requirement, fee_change, deadline_change, form_update, regulatory_update
+  severity      String   @default("info") // critical, warning, info
+  sourceUrl     String?
+  effectiveDate DateTime?
+  isRead        Boolean  @default(false)
+  isDismissed   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([orgId])
+  @@index([state])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model RegulatoryWatch {
+  id          String   @id @default(cuid())
+  orgId       String
+  state       String
+  licenseType String?
+  isActive    Boolean  @default(true)
+  lastChecked DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@unique([orgId, state, licenseType])
+  @@index([orgId])
+}
+
+model GeneratedDocument {
+  id          String   @id @default(cuid())
+  orgId       String
+  userId      String?
+  template    String
+  inputData   String   // JSON
+  content     String
+  format      String   @default("html")
+  createdAt   DateTime @default(now())
+  
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([orgId])
+  @@index([createdAt])
+}
+
+model SignatureRequest {
+  id              String   @id @default(cuid())
+  orgId           String
+  documentTitle   String
+  documentType    String   @default("general") // license_renewal, compliance_cert, contract, coi, bond, general
+  documentUrl     String?
+  documentContent String?  // HTML content of the document to sign
+  requestedById   String?
+  requestedToName String
+  requestedToEmail String
+  message         String?
+  status          String   @default("pending") // pending, viewed, signed, declined, expired, cancelled
+  signingToken    String   @unique
+  signedAt        DateTime?
+  declinedAt      DateTime?
+  declinedReason  String?
+  expiresAt       DateTime?
+  signatureData   String?  // JSON: { type: "draw|type", value: string, signedAt: string, ipAddress: string }
+  signerName      String?
+  signerTitle     String?
+  witnessName     String?
+  witnessEmail    String?
+  auditTrail      String?  // JSON array of { action, timestamp, ip, userAgent }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([orgId])
+  @@index([signingToken])
+  @@index([status])
+}
+
+model ContractorDirectory {
+  id              String   @id @default(cuid())
+  orgId           String
+  companyName     String
+  tradeType       String   // electrical, plumbing, hvac, general, roofing, concrete, painting, landscaping, other
+  licenseNumber   String?
+  licenseState    String?
+  licenseStatus   String   @default("unknown") // active, expired, suspended, revoked, unknown
+  licenseExpiry   DateTime?
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+  website         String?
+  insuranceProvider String?
+  insuranceExpiry DateTime?
+  insuranceStatus String   @default("unknown") // compliant, deficient, expired, unknown
+  bondingCapacity Float    @default(0)
+  complianceScore Float    @default(0)
+  totalProjects   Int      @default(0)
+  completedProjects Int    @default(0)
+  rating          Float    @default(0) // 0-5
+  reviewCount     Int      @default(0)
+  specialties     String?  // JSON array of specialty strings
+  certifications  String?  // JSON array of certification strings
+  serviceAreas    String?  // JSON array of state codes
+  yearsInBusiness Int      @default(0)
+  employeeCount   String?  // "1-10", "11-50", "51-200", "200+"
+  isVerified      Boolean  @default(false)
+  isPreferred     Boolean  @default(false)
+  isBlacklisted   Boolean  @default(false)
+  notes           String?
+  tags            String?  // JSON array of tag strings
+  lastVerifiedAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([tradeType])
+  @@index([state])
+  @@index([complianceScore])
+}
+
+model Integration {
+  id            String   @id @default(cuid())
+  orgId         String
+  name          String
+  type          String   // procore, quickbooks, sage, adp, workday, bamboohr, custom
+  category      String   // construction_erp, accounting, hris, ats, custom
+  status        String   @default("disconnected") // connected, disconnected, error, syncing
+  config        String?  // JSON: { apiKey, baseUrl, syncFrequency, lastSync, mappings }
+  lastSyncAt    DateTime?
+  lastSyncStatus String? // success, partial, failed
+  syncCount     Int      @default(0)
+  errorCount    Int      @default(0)
+  lastError     String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  syncLogs      IntegrationSyncLog[]
+
+  @@index([orgId])
+  @@index([type])
+}
+
+model IntegrationSyncLog {
+  id            String   @id @default(cuid())
+  integrationId String
+  orgId         String
+  type          String   // full, incremental, manual
+  status        String   // running, completed, failed
+  recordsSynced Int      @default(0)
+  errors        String?  // JSON array of error messages
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+  @@index([startedAt])
+}
+
+model BoardSubmission {
+  id              String   @id @default(cuid())
+  orgId           String
+  submissionType  String   // new_license, renewal, reinstatement, name_change, address_change, ce_report, other
+  licenseId       String?  // optional link to existing license
+  qualifierId     String?  // optional link to qualifier
+  state           String
+  boardName       String
+  boardEmail      String?
+  boardPortalUrl  String?
+  applicationForm String?  // JSON: { fields: [{name, label, value, required}] }
+  supportingDocs  String?  // JSON: [{docId, fileName, category, uploaded}]
+  coverLetter     String?
+  submissionData  String?  // JSON: complete submission package data
+  status          String   @default("draft") // draft, ready, submitted, under_review, approved, rejected, returned
+  trackingNumber  String?
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  responseDate    DateTime?
+  boardResponse   String?
+  filingFee       Float    @default(0)
+  feePaid         Boolean  @default(false)
+  paymentRef      String?
+  estimatedDays   Int      @default(30)
+  priority        String   @default("normal") // urgent, high, normal, low
+  notes           String?
+  checklistData   String?  // JSON: [{item, completed}]
+  auditTrail      String?  // JSON: [{action, timestamp, userId, details}]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([orgId])
+  @@index([state])
+  @@index([status])
+  @@index([submissionType])
+}
+
+model VendorScore {
+  id              String   @id @default(cuid())
+  orgId           String
+  subcontractorId String?  // link to existing Subcontractor
+  vendorName      String
+  vendorEmail     String?
+  overallScore    Float    @default(0)
+  riskLevel       String   @default("medium") // low, medium, high, critical
+  
+  // Category scores (0-100 each)
+  licenseScore    Float    @default(0)
+  insuranceScore  Float    @default(0)
+  documentScore   Float    @default(0)
+  complianceScore Float    @default(0)
+  experienceScore Float    @default(0)
+  responsivenessScore Float @default(0)
+  
+  // License details
+  licenseVerified Boolean  @default(false)
+  licenseExpiry   DateTime?
+  licenseState    String?
+  licenseType     String?
+  
+  // Insurance details
+  insuranceVerified Boolean @default(false)
+  insuranceExpiry   DateTime?
+  coiOnFile         Boolean @default(false)
+  endorsementStatus String  @default("unknown") // compliant, deficient, unknown
+  
+  // Document details
+  requiredDocs    Int      @default(0)
+  submittedDocs   Int      @default(0)
+  expiredDocs     Int      @default(0)
+  
+  // Experience
+  totalProjects   Int      @default(0)
+  completedProjects Int    @default(0)
+  onTimeRate      Float    @default(0)
+  avgRating       Float    @default(0)
+  
+  // Responsiveness
+  avgResponseDays Float    @default(0)
+  docRequestCount Int      @default(0)
+  docResponseCount Int     @default(0)
+  
+  // Flags
+  isFlagged      Boolean  @default(false)
+  flagReason     String?
+  lastAssessment DateTime?
+  nextAssessment DateTime?
+  assessmentHistory String? // JSON: [{date, score, changes}]
+  
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  
+  @@index([orgId])
+  @@index([riskLevel])
+  @@index([overallScore])
+}
+
+model ScheduledReport {
+  id           String   @id @default(cuid())
+  orgId        String
+  frequency    String   @default("monthly")  // weekly, monthly, quarterly
+  recipients   String   // JSON array of email addresses
+  reportType   String   @default("compliance") // compliance, full, licenses
+  format       String   @default("pdf")  // pdf, csv
+  enabled      Boolean  @default(false)
+  lastSentAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId])
+  @@index([orgId])
+  @@index([enabled])
+}

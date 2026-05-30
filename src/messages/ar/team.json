@@ -1,0 +1,31 @@
+{
+  "title": "الفريق",
+  "invite": "دعوة عضو",
+  "inviteEmail": "البريد الإلكتروني",
+  "inviteEmailPlaceholder": "colleague@company.com",
+  "inviteRole": "الدور",
+  "inviteSuccess": "تم إرسال الدعوة بنجاح",
+  "inviteError": "فشل إرسال الدعوة",
+  "roles": {
+    "owner": "المالك",
+    "admin": "المسؤول",
+    "member": "عضو"
+  },
+  "pending": "قيد الانتظار",
+  "pendingInvites": "الدعوات المعلقة",
+  "members": "الأعضاء",
+  "removeConfirm": "هل أنت متأكد من إزالة هذا العضو؟",
+  "noMembers": "لا يوجد أعضاء في الفريق بعد.",
+  "joined": "انضم",
+  "invited": "مدعو",
+  "cancelInvite": "إلغاء الدعوة",
+  "resendInvite": "إعادة إرسال الدعوة",
+  "removeMember": "إزالة عضو",
+  "removeSuccess": "تمت إزالة العضو بنجاح",
+  "changeRole": "تغيير الدور",
+  "roleChangeSuccess": "تم تحديث الدور بنجاح",
+  "saveRole": "حفظ الدور",
+  "cancelSuccess": "تم إلغاء الدعوة بنجاح",
+  "resendSuccess": "تمت إعادة إرسال الدعوة بنجاح",
+  "cancelConfirm": "هل أنت متأكد أنك تريد إلغاء هذه الدعوة؟"
+}

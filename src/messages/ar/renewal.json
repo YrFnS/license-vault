@@ -1,0 +1,22 @@
+{
+  "title": "تجديد الترخيص",
+  "description": "تمديد تاريخ انتهاء هذا الترخيص لمدة سنة",
+  "currentExpiration": "تاريخ الانتهاء الحالي",
+  "newExpiration": "تاريخ الانتهاء الجديد",
+  "notes": "ملاحظات التجديد",
+  "notesPlaceholder": "أضف ملاحظات حول هذا التجديد...",
+  "confirm": "تأكيد التجديد",
+  "cancel": "إلغاء",
+  "success": "تم تجديد الترخيص بنجاح",
+  "error": "فشل تجديد الترخيص",
+  "history": "سجل التجديدات",
+  "noHistory": "لا يوجد سجل تجديدات",
+  "renewedOn": "تم التجديد في {date}",
+  "autoRenew": "تجديد تلقائي",
+  "autoRenewDesc": "تجديد هذا الترخيص تلقائياً قبل الانتهاء",
+  "renewButton": "تجديد الترخيص",
+  "renewedBadge": "مجدّد",
+  "daysUntilExpiry": "{days} أيام حتى الانتهاء",
+  "expiredAgo": "انتهى منذ {days} أيام",
+  "renewalNeeded": "يحتاج تجديد"
+}

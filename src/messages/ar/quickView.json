@@ -1,0 +1,7 @@
+{
+  "description": "عرض سريع لتفاصيل {name}",
+  "renewButton": "تجديد",
+  "viewFullDetails": "عرض التفاصيل الكاملة",
+  "expiresIn": "ينتهي خلال {days} أيام",
+  "expiredAgo": "انتهى منذ {days} أيام"
+}

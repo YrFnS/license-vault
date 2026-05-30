@@ -1,0 +1,13 @@
+{
+  "title": "تقارير الامتثال",
+  "orgReport": "تقرير المؤسسة",
+  "licenseReport": "تقرير الترخيص",
+  "generateReport": "إنشاء التقرير",
+  "downloadPdf": "تحميل PDF",
+  "generating": "جاري الإنشاء...",
+  "executiveSummary": "الملخص التنفيذي",
+  "atRiskItems": "عناصر معرضة للخطر",
+  "complianceOverview": "نظرة عامة على الامتثال",
+  "generatedOn": "تم الإنشاء في {date}",
+  "nav": "التقارير"
+}

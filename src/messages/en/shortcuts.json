@@ -1,0 +1,29 @@
+{
+  "title": "Keyboard Shortcuts",
+  "subtitle": "Quick actions to speed up your workflow",
+  "then": "then",
+  "footer": "Use these shortcuts to navigate faster",
+  "categories": {
+    "navigation": "Navigation",
+    "actions": "Actions",
+    "general": "General"
+  },
+  "shortcuts": {
+    "navDashboard": "Go to Dashboard",
+    "navLicenses": "Go to Licenses",
+    "navProjects": "Go to Projects",
+    "navSettings": "Go to Settings",
+    "navTeam": "Go to Team",
+    "navCompliance": "Go to Compliance",
+    "navCalendar": "Go to Calendar",
+    "navAdmin": "Go to Admin",
+    "navAiChat": "Go to AI Chat",
+    "actNewLicense": "Create New License",
+    "actSearch": "Search",
+    "actToggleSidebar": "Toggle Sidebar",
+    "actRefresh": "Refresh",
+    "genShowShortcuts": "Show Shortcuts",
+    "genShowShortcutsAlt": "Show Shortcuts",
+    "genCloseDialog": "Close Dialog"
+  }
+}

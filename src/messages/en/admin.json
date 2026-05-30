@@ -1,0 +1,26 @@
+{
+  "title": "Admin Dashboard",
+  "auditLog": "Audit Log",
+  "stats": {
+    "totalLicenses": "Total Licenses",
+    "totalUsers": "Total Users",
+    "complianceRate": "Compliance Rate",
+    "avgRenewalTime": "Avg. Renewal Time"
+  },
+  "statusDistribution": "License Status Distribution",
+  "statusBreakdown": "License Status Breakdown",
+  "recentActivity": "Recent Activity",
+  "noActivity": "No recent activity",
+  "accessDenied": "You don't have permission to access this page.",
+  "active": "Active",
+  "expiringSoon": "Expiring Soon",
+  "expired": "Expired",
+  "action": "Action",
+  "entity": "Entity",
+  "details": "Details",
+  "by": "By",
+  "complianceTrend": "Compliance Trend",
+  "complianceTrendDesc": "Compliance rate over the last 6 months",
+  "licenseDistribution": "License Distribution by Type",
+  "licenseDistributionDesc": "Number of licenses categorized by type"
+}

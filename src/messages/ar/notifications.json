@@ -1,0 +1,9 @@
+{
+  "title": "الإشعارات",
+  "markAllRead": "تحديد الكل كمقروء",
+  "noNotifications": "لا توجد إشعارات بعد",
+  "licenseExpiring": "ترخيص ينتهي قريباً",
+  "licenseExpired": "ترخيص منتهي",
+  "daysLeft": "{days} أيام متبقية",
+  "expiredDays": "انتهى منذ {days} أيام"
+}

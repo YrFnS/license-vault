@@ -1,0 +1,66 @@
+{
+  "title": "Organization Settings",
+  "description": "Manage your organization profile, branding, and hierarchy",
+  "profile": {
+    "title": "Organization Profile",
+    "name": "Organization Name",
+    "tradeType": "Trade Type",
+    "primaryState": "Primary State",
+    "companyName": "Legal Company Name",
+    "save": "Save Profile",
+    "saving": "Saving...",
+    "saved": "Profile saved successfully"
+  },
+  "branding": {
+    "title": "Branding & Customization",
+    "logoUrl": "Logo URL",
+    "primaryColor": "Primary Color",
+    "loginMessage": "Custom Login Message",
+    "loginMessagePlaceholder": "Welcome to our compliance portal...",
+    "preview": "Preview",
+    "save": "Save Branding",
+    "saved": "Branding saved successfully",
+    "resetToDefault": "Reset to Default"
+  },
+  "hierarchy": {
+    "title": "Organization Hierarchy",
+    "parentOrg": "Parent Organization",
+    "subsidiaries": "Subsidiaries",
+    "addSubsidiary": "Add Subsidiary",
+    "unlink": "Unlink",
+    "unlinkConfirm": "Unlink this subsidiary?",
+    "unlinkWarning": "This will remove the parent-child relationship.",
+    "noSubsidiaries": "No subsidiaries yet",
+    "noSubsidiariesDesc": "Add subsidiary organizations to manage from one place",
+    "licenseCount": "Licenses",
+    "complianceScore": "Compliance",
+    "memberCount": "Members",
+    "viewDashboard": "View Dashboard",
+    "subsidiaryCreated": "Subsidiary organization created",
+    "subsidiaryUnlinked": "Subsidiary unlinked"
+  },
+  "crossCompliance": {
+    "title": "Cross-Organization Compliance",
+    "totalOrgs": "Total Organizations",
+    "combinedCompliance": "Combined Compliance",
+    "totalLicenses": "Total Licenses",
+    "atRisk": "At Risk",
+    "orgName": "Organization",
+    "compliancePercent": "Compliance %",
+    "activeLicenses": "Active",
+    "expiringLicenses": "Expiring",
+    "expiredLicenses": "Expired"
+  },
+  "plan": {
+    "title": "Plan & Billing",
+    "currentPlan": "Current Plan",
+    "free": "Free",
+    "pro": "Pro",
+    "enterprise": "Enterprise",
+    "licensesUsed": "Licenses Used",
+    "teamMembers": "Team Members",
+    "projects": "Projects",
+    "apiCalls": "API Calls This Month",
+    "upgrade": "Upgrade Plan"
+  }
+}

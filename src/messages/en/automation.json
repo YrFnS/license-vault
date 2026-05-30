@@ -1,0 +1,60 @@
+{
+  "title": "Automation Engine",
+  "description": "Configure automated compliance monitoring and notifications",
+  "status": {
+    "title": "Engine Status",
+    "running": "Running",
+    "stopped": "Stopped",
+    "lastRun": "Last Run",
+    "nextRun": "Next Run",
+    "never": "Never",
+    "enabled": "Automation Enabled",
+    "disabled": "Automation Disabled"
+  },
+  "settings": {
+    "title": "Settings",
+    "checkFrequency": "Check Frequency",
+    "hourly": "Every Hour",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "escalationDays": "Escalation After (days)",
+    "escalationDesc": "Notify owners if license remains expired for this many days",
+    "notifyExpired": "Notify on Expired Licenses",
+    "notifyExpiring": "Notify on Expiring Licenses",
+    "notifyInsurance": "Notify on Insurance Expiration",
+    "save": "Save Settings",
+    "saving": "Saving...",
+    "saved": "Settings saved"
+  },
+  "run": {
+    "title": "Manual Run",
+    "runNow": "Run Checks Now",
+    "running": "Running checks...",
+    "confirm": "Run all compliance checks now?",
+    "confirmDesc": "This will check all licenses, insurance, and escalation rules.",
+    "results": "Run Results",
+    "licensesExpiring": "Licenses Expiring",
+    "licensesExpired": "Licenses Expired",
+    "insuranceExpiring": "Insurance Expiring",
+    "escalations": "Escalations",
+    "notificationsSent": "Notifications Sent",
+    "success": "Automation check completed successfully",
+    "error": "Automation check failed"
+  },
+  "history": {
+    "title": "Run History",
+    "type": "Type",
+    "status": "Status",
+    "startedAt": "Started",
+    "completedAt": "Completed",
+    "duration": "Duration",
+    "completed": "Completed",
+    "failed": "Failed",
+    "running": "Running",
+    "fullCheck": "Full Check",
+    "expiration": "Expiration Check",
+    "insurance": "Insurance Check",
+    "escalation": "Escalation Check",
+    "noHistory": "No automation runs recorded"
+  }
+}

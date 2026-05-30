@@ -1,0 +1,174 @@
+{
+  "hero": {
+    "title": "Never Miss a License Renewal",
+    "subtitle": "Track contractor licenses, permits, and certifications across your entire organization. Get alerts before they expire.",
+    "cta": "Get Started Free",
+    "secondaryCta": "See How It Works",
+    "badge": "Compliance Made Easy",
+    "statLicenses": "Licenses Tracked",
+    "statTeams": "Teams Active",
+    "statUptime": "Uptime",
+    "dashboardPreview": "Dashboard Preview"
+  },
+  "stats": {
+    "licensesTracked": "Licenses Tracked",
+    "teamsActive": "Teams Active",
+    "complianceRate": "Compliance Rate",
+    "statesCovered": "States Covered",
+    "licensesTrackedValue": "10,000+",
+    "teamsActiveValue": "500+",
+    "complianceRateValue": "99.9%",
+    "statesCoveredValue": "50"
+  },
+  "trustedBy": {
+    "title": "Trusted by contractors nationwide",
+    "companies": [
+      "Acme Construction",
+      "BuildRight Co",
+      "ProContractors",
+      "SafeBuild Inc",
+      "EliteWorks",
+      "GreenField Services"
+    ]
+  },
+  "testimonials": {
+    "title": "Loved by Contractors Everywhere",
+    "subtitle": "See what our customers have to say about LicenseVault.",
+    "items": [
+      {
+        "name": "Sarah Mitchell",
+        "role": "Operations Director, Acme Construction",
+        "quote": "LicenseVault has completely transformed how we manage our licenses. We used to have spreadsheets everywhere — now everything is in one place with automatic alerts."
+      },
+      {
+        "name": "James Rodriguez",
+        "role": "CEO, ProContractors",
+        "quote": "The AI compliance assistant is a game-changer. It answered our licensing questions instantly and saved us from a costly compliance gap."
+      },
+      {
+        "name": "Emily Chen",
+        "role": "HR Manager, SafeBuild Inc",
+        "quote": "Managing certifications for 200+ employees was a nightmare. LicenseVault made it effortless. The team management features are exactly what we needed."
+      }
+    ]
+  },
+  "features": {
+    "title": "Everything You Need to Stay Compliant",
+    "subtitle": "LicenseVault keeps your team licensed, your projects on track, and your business audit-ready.",
+    "track": {
+      "title": "Track Every License",
+      "description": "Monitor state licenses, city permits, employee certifications, insurance policies, and bonds — all in one place."
+    },
+    "alerts": {
+      "title": "Smart Expiration Alerts",
+      "description": "Get notified 60, 30, and 5 days before any license expires. Never be caught off guard again."
+    },
+    "ai": {
+      "title": "AI-Powered Compliance",
+      "description": "Ask our AI assistant about licensing requirements, scan documents, and get compliance recommendations."
+    },
+    "team": {
+      "title": "Team Management",
+      "description": "Invite team members, assign roles, and ensure everyone's credentials are up to date."
+    },
+    "import": {
+      "title": "Bulk CSV Import",
+      "description": "Import your entire license portfolio in seconds with our smart CSV parser and validation."
+    },
+    "compliance": {
+      "title": "Compliance Portal",
+      "description": "Share your compliance status publicly with clients and partners through secure share links."
+    }
+  },
+  "pricing": {
+    "title": "Simple, Transparent Pricing",
+    "subtitle": "Start free, upgrade when you need more.",
+    "free": {
+      "name": "Free",
+      "price": "$0",
+      "period": "/month",
+      "features": [
+        "Up to 25 licenses",
+        "5 team members",
+        "Email & in-app alerts",
+        "CSV import",
+        "Compliance portal"
+      ],
+      "cta": "Start Free"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$29",
+      "period": "/month",
+      "mostPopular": "Most Popular",
+      "features": [
+        "Unlimited licenses",
+        "Unlimited team members",
+        "Priority support",
+        "Advanced analytics",
+        "AI document scanning",
+        "Custom alerts"
+      ],
+      "cta": "Start Pro Trial"
+    }
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "subtitle": "Get compliant in three simple steps — no complicated setup required.",
+    "step1": {
+      "title": "Track",
+      "description": "Add all your licenses, permits, and certifications in one place. Import from CSV or enter manually."
+    },
+    "step2": {
+      "title": "Alert",
+      "description": "Receive smart notifications 60, 30, and 5 days before any license expires via email and in-app."
+    },
+    "step3": {
+      "title": "Comply",
+      "description": "Renew on time, share compliance status with clients, and stay audit-ready at all times."
+    }
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "items": [
+      {
+        "q": "What types of licenses can I track?",
+        "a": "You can track state contractor licenses, city permits, employee certifications, insurance policies, bonds, and any other credential with an expiration date."
+      },
+      {
+        "q": "How do expiration alerts work?",
+        "a": "You configure which alert windows matter to you (60, 30, or 5 days before expiry). We send both in-app notifications and email alerts."
+      },
+      {
+        "q": "Can I share compliance status with clients?",
+        "a": "Yes! Create a public compliance share link that shows your active licenses and credentials without exposing sensitive details."
+      },
+      {
+        "q": "What does the AI assistant do?",
+        "a": "Our AI assistant answers questions about licensing requirements, helps scan documents to extract license details, and provides compliance recommendations."
+      }
+    ]
+  },
+  "backToTop": "Back to top",
+  "footer": {
+    "rights": "All rights reserved.",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "product": "Product",
+    "company": "Company",
+    "legal": "Legal",
+    "features": "Features",
+    "pricing": "Pricing",
+    "integrations": "Integrations",
+    "changelog": "Changelog",
+    "about": "About Us",
+    "blog": "Blog",
+    "careers": "Careers",
+    "contact": "Contact",
+    "privacyPolicy": "Privacy Policy",
+    "termsOfService": "Terms of Service",
+    "cookiePolicy": "Cookie Policy",
+    "security": "Security",
+    "description": "The trusted platform for contractor license compliance management."
+  }
+}

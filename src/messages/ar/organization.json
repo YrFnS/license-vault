@@ -1,0 +1,66 @@
+{
+  "title": "إعدادات المؤسسة",
+  "description": "إدارة ملف المؤسسة والعلامة التجارية والتسلسل الهرمي",
+  "profile": {
+    "title": "ملف المؤسسة",
+    "name": "اسم المؤسسة",
+    "tradeType": "نوع التجارة",
+    "primaryState": "الولاية الرئيسية",
+    "companyName": "الاسم القانوني للشركة",
+    "save": "حفظ الملف الشخصي",
+    "saving": "جاري الحفظ...",
+    "saved": "تم حفظ الملف الشخصي بنجاح"
+  },
+  "branding": {
+    "title": "العلامة التجارية والتخصيص",
+    "logoUrl": "رابط الشعار",
+    "primaryColor": "اللون الرئيسي",
+    "loginMessage": "رسالة تسجيل الدخول المخصصة",
+    "loginMessagePlaceholder": "مرحباً بكم في بوابة الامتثال...",
+    "preview": "معاينة",
+    "save": "حفظ العلامة التجارية",
+    "saved": "تم حفظ العلامة التجارية بنجاح",
+    "resetToDefault": "إعادة التعيين للافتراضي"
+  },
+  "hierarchy": {
+    "title": "التسلسل الهرمي للمؤسسة",
+    "parentOrg": "المؤسسة الأم",
+    "subsidiaries": "الشركات التابعة",
+    "addSubsidiary": "إضافة شركة تابعة",
+    "unlink": "فك الارتباط",
+    "unlinkConfirm": "فك الارتباط بهذه الشركة التابعة؟",
+    "unlinkWarning": "سيؤدي هذا إلى إزالة العلاقة بين المؤسسة الأم والتابعة.",
+    "noSubsidiaries": "لا توجد شركات تابعة بعد",
+    "noSubsidiariesDesc": "أضف مؤسسات تابعة لإدارتها من مكان واحد",
+    "licenseCount": "التراخيص",
+    "complianceScore": "الامتثال",
+    "memberCount": "الأعضاء",
+    "viewDashboard": "عرض لوحة التحكم",
+    "subsidiaryCreated": "تم إنشاء المؤسسة التابعة",
+    "subsidiaryUnlinked": "تم فك ارتباط المؤسسة التابعة"
+  },
+  "crossCompliance": {
+    "title": "الامتثال عبر المؤسسات",
+    "totalOrgs": "إجمالي المؤسسات",
+    "combinedCompliance": "الامتثال المدمج",
+    "totalLicenses": "إجمالي التراخيص",
+    "atRisk": "في خطر",
+    "orgName": "المؤسسة",
+    "compliancePercent": "نسبة الامتثال",
+    "activeLicenses": "نشط",
+    "expiringLicenses": "ينتهي قريباً",
+    "expiredLicenses": "منتهي"
+  },
+  "plan": {
+    "title": "الخطة والفوترة",
+    "currentPlan": "الخطة الحالية",
+    "free": "مجاني",
+    "pro": "احترافي",
+    "enterprise": "مؤسسي",
+    "licensesUsed": "التراخيص المستخدمة",
+    "teamMembers": "أعضاء الفريق",
+    "projects": "المشاريع",
+    "apiCalls": "استدعاءات API هذا الشهر",
+    "upgrade": "ترقية الخطة"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "title": "License Calendar",
+  "subtitle": "View license expiration dates on a calendar",
+  "today": "Today",
+  "upcoming": "Upcoming Expirations",
+  "noExpirations": "No upcoming expirations",
+  "expiringOn": "Expiring on {date}",
+  "daysUntil": "{days} days remaining",
+  "expiredDays": "Expired {days} days ago",
+  "listView": "List View",
+  "calendarView": "Calendar View",
+  "sun": "Sun",
+  "mon": "Mon",
+  "tue": "Tue",
+  "wed": "Wed",
+  "thu": "Thu",
+  "fri": "Fri",
+  "sat": "Sat"
+}

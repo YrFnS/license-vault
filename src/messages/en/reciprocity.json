@@ -1,0 +1,14 @@
+{
+  "title": "Reciprocity Map",
+  "description": "Check license reciprocity between states",
+  "selectSourceState": "Your licensed state",
+  "selectTargetState": "State you want to work in",
+  "checkReciprocity": "Check Reciprocity",
+  "reciprocityExists": "Reciprocity Available!",
+  "noReciprocity": "No reciprocity agreement found",
+  "coveredTypes": "Covered License Types",
+  "nasclaNote": "NASCLA exam accepted in this state",
+  "additionalRequirements": "Additional requirements may apply",
+  "boardContact": "Board Contact",
+  "statesWithReciprocity": "States with reciprocity"
+}

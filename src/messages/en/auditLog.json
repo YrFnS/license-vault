@@ -1,0 +1,18 @@
+{
+  "title": "Audit Log",
+  "subtitle": "Track all changes and activities in your organization",
+  "date": "Date/Time",
+  "action": "Action",
+  "entity": "Entity",
+  "details": "Details",
+  "user": "User",
+  "filterAll": "All Actions",
+  "filterCreate": "Create",
+  "filterUpdate": "Update",
+  "filterDelete": "Delete",
+  "searchPlaceholder": "Search audit logs...",
+  "noLogs": "No audit logs found",
+  "loadMore": "Load More",
+  "showing": "Showing {count} of {total} entries",
+  "system": "System"
+}

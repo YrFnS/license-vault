@@ -1,0 +1,73 @@
+{
+  "title": "الأمان والتصلب",
+  "description": "مراقبة وإعدادات أمان التطبيق",
+  "rateLimiting": {
+    "title": "تحديد المعدل",
+    "description": "تكوين تقييد طلبات API",
+    "apiLimit": "نقاط نهاية API",
+    "authLimit": "المصادقة",
+    "publicApiLimit": "API العام",
+    "requestsPerMinute": "طلب/دقيقة",
+    "active": "نشط",
+    "windowMs": "النافذة",
+    "maxRequests": "الحد الأقصى للطلبات"
+  },
+  "headers": {
+    "title": "رؤوس الأمان",
+    "description": "تكوين رؤوس أمان HTTP",
+    "xContentType": "X-Content-Type-Options",
+    "xFrameOptions": "X-Frame-Options",
+    "xXssProtection": "X-XSS-Protection",
+    "referrerPolicy": "Referrer-Policy",
+    "permissionsPolicy": "Permissions-Policy",
+    "contentSecurity": "Content-Security-Policy",
+    "enabled": "مفعّل",
+    "disabled": "معطّل"
+  },
+  "csrf": {
+    "title": "حماية CSRF",
+    "description": "منع تزوير الطلبات عبر المواقع",
+    "status": "الحالة",
+    "tokensGenerated": "الرموز المُنشأة",
+    "tokensValidated": "الرموز المُتحقق منها",
+    "failures": "عمليات التحقق الفاشلة"
+  },
+  "backups": {
+    "title": "نسخ احتياطية لقاعدة البيانات",
+    "description": "إدارة النسخ الاحتياطية التلقائية واليدوية لقاعدة البيانات",
+    "createBackup": "إنشاء نسخة احتياطية الآن",
+    "creating": "جاري إنشاء النسخة الاحتياطية...",
+    "autoBackup": "نسخ احتياطي تلقائي",
+    "schedule": "الجدول",
+    "daily": "يومي",
+    "weekly": "أسبوعي",
+    "disabled": "معطّل",
+    "lastBackup": "آخر نسخة احتياطية",
+    "fileName": "اسم الملف",
+    "size": "الحجم",
+    "created": "تاريخ الإنشاء",
+    "noBackups": "لا توجد نسخ احتياطية بعد",
+    "createFirst": "أنشئ أول نسخة احتياطية لحماية بياناتك",
+    "success": "تم إنشاء النسخة الاحتياطية بنجاح",
+    "error": "فشل إنشاء النسخة الاحتياطية"
+  },
+  "audit": {
+    "title": "سجل تدقيق الأمان",
+    "description": "أحداث وحوادث الأمان الأخيرة",
+    "noEvents": "لم يتم تسجيل أحداث أمان",
+    "event": "الحدث",
+    "details": "التفاصيل",
+    "timestamp": "الوقت",
+    "failedAuth": "فشل المصادقة",
+    "rateLimitHit": "تم تجاوز حد المعدل",
+    "csrfFailure": "فشل التحقق من CSRF",
+    "xssAttempt": "محاولة XSS مكتشفة"
+  },
+  "sanitization": {
+    "title": "تنقية المدخلات",
+    "description": "إحصائيات التحقق من المدخلات ومنع XSS",
+    "inputsSanitized": "المدخلات المنقاة",
+    "xssBlocked": "محاولات XSS المحظورة",
+    "sqlInjectionBlocked": "محاولات حقن SQL المحظورة"
+  }
+}
