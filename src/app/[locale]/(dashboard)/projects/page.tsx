@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -528,29 +528,24 @@ export default function ProjectsPage() {
   };
 
   // Stats cards data
+  const fadeIn = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
+  const containerVariants = { animate: { transition: { staggerChildren: 0.05 } } };
+
   const statCards = [
-    { label: t('totalProjects'), value: counts.all, icon: FolderKanban, color: 'from-teal-50/90 via-teal-50/60 to-teal-100/40 dark:from-teal-950/30 dark:via-teal-950/20 dark:to-teal-950/10', border: 'border-s-teal-500', iconColor: 'text-teal-600 dark:text-teal-400' },
-    { label: t('activeProjects'), value: counts.active, icon: TrendingUp, color: 'from-emerald-50/90 via-emerald-50/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-emerald-950/20 dark:to-emerald-950/10', border: 'border-s-emerald-500', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-    { label: t('complianceRate'), value: `${stats.avgCompliance}%`, icon: Shield, color: 'from-emerald-50/90 via-emerald-50/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-emerald-950/20 dark:to-emerald-950/10', border: 'border-s-emerald-500', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-    { label: t('atRisk'), value: stats.atRiskCount, icon: AlertTriangle, color: 'from-red-50/90 via-red-50/60 to-red-100/40 dark:from-red-950/30 dark:via-red-950/20 dark:to-red-950/10', border: 'border-s-red-500', iconColor: 'text-red-600 dark:text-red-400' },
+    { label: t('totalProjects'), value: counts.all, icon: FolderKanban, color: '', border: 'border-l-slate-400', iconColor: 'text-slate-500' },
+    { label: t('activeProjects'), value: counts.active, icon: TrendingUp, color: '', border: 'border-l-emerald-500', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+    { label: t('complianceRate'), value: `${stats.avgCompliance}%`, icon: Shield, color: '', border: 'border-l-emerald-500', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+    { label: t('atRisk'), value: stats.atRiskCount, icon: AlertTriangle, color: '', border: 'border-l-red-500', iconColor: 'text-red-600 dark:text-red-400' },
   ];
 
-  const fadeIn = {
-    initial: { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -12 },
-  };
-
-  const containerVariants = {
-    animate: { transition: { staggerChildren: 0.05 } },
-  };
+  
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <motion.div {...fadeIn} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
             {t('title')}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{t('description')}</p>
@@ -575,7 +570,7 @@ export default function ProjectsPage() {
           const Icon = stat.icon;
           return (
             <motion.div key={idx} variants={fadeIn}>
-              <Card className={cn('relative overflow-hidden bg-gradient-to-r border-s-4 shadow-sm hover:shadow-md transition-shadow duration-300', stat.color)}>
+              <Card className={cn('border-l-2', stat.border)}>
                 <CardContent className="p-3 md:p-4 lg:p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -880,7 +875,7 @@ export default function ProjectsPage() {
               {selectedProject && (
                 <div className="space-y-4">
                   {/* Compliance Score */}
-                  <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-muted/60 to-muted/30 border border-border/30">
+                  <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <ComplianceScoreCircle score={selectedProject.complianceScore || 0} size={72} />
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">{t('complianceScore')}</p>
