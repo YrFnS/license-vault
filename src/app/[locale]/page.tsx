@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations, useLocale } from 'next-intl';
+// v2 redesign
 import { Link } from '@/i18n/navigation';
 import { useState, useEffect } from 'react';
 import {
