@@ -28,7 +28,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { XCircle, CheckCircle2, Ban } from "lucide-react";
+import { XCircle, CheckCircle2 } from "lucide-react";
 import type { ApprovalItem } from "../types";
 import { getTypeBadge, getPriorityBadge, getStatusBadge, formatRelativeTime } from "../helpers";
 

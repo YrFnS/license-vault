@@ -243,6 +243,30 @@ export function useSubcontractors() {
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
+  // Bulk selected request (from floating bar)
+  const handleBulkSelectedRequest = useCallback(async () => {
+    const targets = subs.filter((s) => selectedIds.has(s.id));
+    setBulkRequesting(true);
+    try {
+      let ok = 0;
+      await Promise.all(
+        targets.map(async (s) => {
+          const r = await fetch(`/api/subcontractors/${s.id}/request-docs`, {
+            method: "POST",
+          });
+          if (r.ok) ok++;
+        }),
+      );
+      toast.success(t("bulkRequestSent", { count: targets.length }));
+      clearSelection();
+      fetchSubs();
+    } catch {
+      toast.error("Failed");
+    } finally {
+      setBulkRequesting(false);
+    }
+  }, [subs, selectedIds, fetchSubs, clearSelection, t]);
+
   return {
     // Data
     subs,
@@ -291,6 +315,7 @@ export function useSubcontractors() {
     handleDelete,
     handleRequestDocs,
     handleBulkRequest,
+    handleBulkSelectedRequest,
     toggleSelect,
     toggleSelectAll,
     clearSelection,

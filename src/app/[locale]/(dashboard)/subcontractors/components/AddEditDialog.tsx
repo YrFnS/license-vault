@@ -22,6 +22,7 @@ import {
 import { Loader2 } from "lucide-react";
 import type { SubcontractorForm as FormType } from "../types";
 import { US_STATES } from "../constants";
+import type { Dispatch, SetStateAction } from "react";
 
 export default function AddEditDialog({
   open,
@@ -37,7 +38,7 @@ export default function AddEditDialog({
   onOpenChange: (open: boolean) => void;
   editMode: boolean;
   form: FormType;
-  setForm: (form: FormType) => void;
+  setForm: Dispatch<SetStateAction<FormType>>;
   saving: boolean;
   onSave: () => void;
   onCancel: () => void;
