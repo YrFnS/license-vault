@@ -65,7 +65,12 @@ export default function ProjectsPage() {
 	const [loading, setLoading] = useState(true);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState("all");
-	const [counts, setCounts] = useState({ all: 0, active: 0, completed: 0, on_hold: 0 });
+	const [counts, setCounts] = useState({
+		all: 0,
+		active: 0,
+		completed: 0,
+		on_hold: 0,
+	});
 	const [stats, setStats] = useState({ avgCompliance: 0, atRiskCount: 0 });
 
 	// Dialog states
@@ -218,7 +223,11 @@ export default function ProjectsPage() {
 			setProjectDialogOpen(false);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		} finally {
 			setSaving(false);
 		}
@@ -264,7 +273,11 @@ export default function ProjectsPage() {
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		}
 	};
 
@@ -311,7 +324,11 @@ export default function ProjectsPage() {
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		}
 	};
 

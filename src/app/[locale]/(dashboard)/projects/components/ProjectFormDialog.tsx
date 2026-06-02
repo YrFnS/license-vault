@@ -1,6 +1,13 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogDescription,
+	DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -153,7 +160,9 @@ export function ProjectFormDialog({
 						<Label>{t("status")}</Label>
 						<Select
 							value={formData.status}
-							onValueChange={(v) => onFormDataChange({ ...formData, status: v })}
+							onValueChange={(v) =>
+								onFormDataChange({ ...formData, status: v })
+							}
 						>
 							<SelectTrigger>
 								<SelectValue />
@@ -170,7 +179,10 @@ export function ProjectFormDialog({
 						<Textarea
 							value={formData.requiredLicenses}
 							onChange={(e) =>
-								onFormDataChange({ ...formData, requiredLicenses: e.target.value })
+								onFormDataChange({
+									...formData,
+									requiredLicenses: e.target.value,
+								})
 							}
 							placeholder="List required licenses (one per line)..."
 							rows={2}
@@ -181,7 +193,10 @@ export function ProjectFormDialog({
 						<Textarea
 							value={formData.requiredInsurance}
 							onChange={(e) =>
-								onFormDataChange({ ...formData, requiredInsurance: e.target.value })
+								onFormDataChange({
+									...formData,
+									requiredInsurance: e.target.value,
+								})
 							}
 							placeholder="List required insurance (one per line)..."
 							rows={2}

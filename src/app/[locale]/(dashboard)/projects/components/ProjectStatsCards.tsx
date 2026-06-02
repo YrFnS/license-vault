@@ -1,12 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-	FolderKanban,
-	TrendingUp,
-	Shield,
-	AlertTriangle,
-} from "lucide-react";
+import { FolderKanban, TrendingUp, Shield, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -93,9 +88,7 @@ export function ProjectStatsCards({ counts, stats, t }: Props) {
 											"bg-background/50",
 										)}
 									>
-										<Icon
-											className={cn("size-5 lg:size-6", stat.iconColor)}
-										/>
+										<Icon className={cn("size-5 lg:size-6", stat.iconColor)} />
 									</div>
 								</div>
 							</CardContent>
