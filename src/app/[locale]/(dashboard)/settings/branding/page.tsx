@@ -110,48 +110,62 @@ export default function BrandingPage() {
 						<AnimatePresence mode="wait">
 							{activeTab === "logo" && (
 								<BrandingLogoTab
-									customLogo={b.customLogo} setCustomLogo={b.setCustomLogo}
-									customFavicon={b.customFavicon} setCustomFavicon={b.setCustomFavicon}
-									companyName={b.companyName} setCompanyName={b.setCompanyName}
-									tagline={b.tagline} setTagline={b.setTagline}
+									customLogo={b.customLogo}
+									setCustomLogo={b.setCustomLogo}
+									customFavicon={b.customFavicon}
+									setCustomFavicon={b.setCustomFavicon}
+									companyName={b.companyName}
+									setCompanyName={b.setCompanyName}
+									tagline={b.tagline}
+									setTagline={b.setTagline}
 								/>
 							)}
 							{activeTab === "colors" && (
 								<BrandingColorsTab
-									colors={b.colors} setColors={b.setColors}
-									primaryColor={b.primaryColor} setPrimaryColor={b.setPrimaryColor}
+									colors={b.colors}
+									setColors={b.setColors}
+									primaryColor={b.primaryColor}
+									setPrimaryColor={b.setPrimaryColor}
 									applyPreset={b.applyPreset}
 								/>
 							)}
 							{activeTab === "typography" && (
 								<BrandingTypographyTab
-									fonts={b.fonts} setFonts={b.setFonts}
-									companyName={b.companyName} tagline={b.tagline}
+									fonts={b.fonts}
+									setFonts={b.setFonts}
+									companyName={b.companyName}
+									tagline={b.tagline}
 								/>
 							)}
 							{activeTab === "login" && (
 								<BrandingLoginTab
-									loginPage={b.loginPage} setLoginPage={b.setLoginPage}
+									loginPage={b.loginPage}
+									setLoginPage={b.setLoginPage}
 									primaryColor={b.primaryColor}
 								/>
 							)}
 							{activeTab === "email" && (
 								<BrandingEmailTab
-									emailTemplates={b.emailTemplates} setEmailTemplates={b.setEmailTemplates}
+									emailTemplates={b.emailTemplates}
+									setEmailTemplates={b.setEmailTemplates}
 									primaryColor={b.primaryColor}
 								/>
 							)}
 							{activeTab === "portal" && (
 								<BrandingPortalTab
-									portal={b.portal} setPortal={b.setPortal}
+									portal={b.portal}
+									setPortal={b.setPortal}
 									primaryColor={b.primaryColor}
 								/>
 							)}
 							{activeTab === "advanced" && (
 								<BrandingAdvancedTab
-									customCSS={b.customCSS} setCustomCSS={b.setCustomCSS}
-									customHeadJS={b.customHeadJS} setCustomHeadJS={b.setCustomHeadJS}
-									customBodyJS={b.customBodyJS} setCustomBodyJS={b.setCustomBodyJS}
+									customCSS={b.customCSS}
+									setCustomCSS={b.setCustomCSS}
+									customHeadJS={b.customHeadJS}
+									setCustomHeadJS={b.setCustomHeadJS}
+									customBodyJS={b.customBodyJS}
+									setCustomBodyJS={b.setCustomBodyJS}
 									handleExportBranding={b.handleExportBranding}
 									handleImportBranding={b.handleImportBranding}
 									onOpenResetDialog={() => setResetDialogOpen(true)}
@@ -162,9 +176,12 @@ export default function BrandingPage() {
 				</div>
 
 				<BrandingPreviewPanel
-					colors={b.colors} fonts={b.fonts}
-					companyName={b.companyName} portal={b.portal}
-					saving={b.saving} onSave={b.handleSave}
+					colors={b.colors}
+					fonts={b.fonts}
+					companyName={b.companyName}
+					portal={b.portal}
+					saving={b.saving}
+					onSave={b.handleSave}
 				/>
 			</div>
 
@@ -178,7 +195,13 @@ export default function BrandingPage() {
 						<Button variant="outline" onClick={() => setResetDialogOpen(false)}>
 							{tc("cancel")}
 						</Button>
-						<Button variant="destructive" onClick={() => { setResetDialogOpen(false); b.handleReset(); }}>
+						<Button
+							variant="destructive"
+							onClick={() => {
+								setResetDialogOpen(false);
+								b.handleReset();
+							}}
+						>
 							<RotateCcw className="size-4 me-2" />
 							{t("resetDefaults")}
 						</Button>

@@ -43,7 +43,12 @@ export function useProjects(t: (key: string) => string) {
 	const [loading, setLoading] = useState(true);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState("all");
-	const [counts, setCounts] = useState({ all: 0, active: 0, completed: 0, on_hold: 0 });
+	const [counts, setCounts] = useState({
+		all: 0,
+		active: 0,
+		completed: 0,
+		on_hold: 0,
+	});
 	const [stats, setStats] = useState({ avgCompliance: 0, atRiskCount: 0 });
 
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -86,7 +91,9 @@ export function useProjects(t: (key: string) => string) {
 		}
 	}, [search, statusFilter]);
 
-	useEffect(() => { fetchProjects(); }, [fetchProjects]);
+	useEffect(() => {
+		fetchProjects();
+	}, [fetchProjects]);
 
 	const fetchOrgData = useCallback(async () => {
 		try {
@@ -135,8 +142,12 @@ export function useProjects(t: (key: string) => string) {
 			clientEmail: project.clientEmail || "",
 			location: project.location || "",
 			state: project.state || "",
-			startDate: project.startDate ? new Date(project.startDate).toISOString().split("T")[0] : "",
-			endDate: project.endDate ? new Date(project.endDate).toISOString().split("T")[0] : "",
+			startDate: project.startDate
+				? new Date(project.startDate).toISOString().split("T")[0]
+				: "",
+			endDate: project.endDate
+				? new Date(project.endDate).toISOString().split("T")[0]
+				: "",
 			status: project.status,
 			requiredLicenses: project.requiredLicenses || "",
 			requiredInsurance: project.requiredInsurance || "",
@@ -153,12 +164,18 @@ export function useProjects(t: (key: string) => string) {
 
 	const handleSaveProject = async () => {
 		if (!formData.name.trim()) {
-			toast({ title: "Error", description: "Project name is required", variant: "destructive" });
+			toast({
+				title: "Error",
+				description: "Project name is required",
+				variant: "destructive",
+			});
 			return;
 		}
 		try {
 			setSaving(true);
-			const url = editingProject ? `/api/projects/${editingProject.id}` : "/api/projects";
+			const url = editingProject
+				? `/api/projects/${editingProject.id}`
+				: "/api/projects";
 			const method = editingProject ? "PUT" : "POST";
 			const res = await fetch(url, {
 				method,
@@ -169,11 +186,17 @@ export function useProjects(t: (key: string) => string) {
 				const errData = await res.json();
 				throw new Error(errData.error || "Failed to save");
 			}
-			toast({ title: editingProject ? t("updateSuccess") : t("createSuccess") });
+			toast({
+				title: editingProject ? t("updateSuccess") : t("createSuccess"),
+			});
 			setProjectDialogOpen(false);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		} finally {
 			setSaving(false);
 		}
@@ -182,14 +205,20 @@ export function useProjects(t: (key: string) => string) {
 	const handleDeleteProject = async () => {
 		if (!deletingProject) return;
 		try {
-			const res = await fetch(`/api/projects/${deletingProject.id}`, { method: "DELETE" });
+			const res = await fetch(`/api/projects/${deletingProject.id}`, {
+				method: "DELETE",
+			});
 			if (!res.ok) throw new Error("Failed to delete");
 			toast({ title: t("deleteSuccess") });
 			setDeleteDialogOpen(false);
 			setDeletingProject(null);
 			fetchProjects();
 		} catch {
-			toast({ title: "Error", description: "Failed to delete project", variant: "destructive" });
+			toast({
+				title: "Error",
+				description: "Failed to delete project",
+				variant: "destructive",
+			});
 		}
 	};
 
@@ -211,31 +240,45 @@ export function useProjects(t: (key: string) => string) {
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		}
 	};
 
 	const handleUnlinkLicense = async (licenseId: string) => {
 		if (!selectedProject) return;
 		try {
-			const res = await fetch(`/api/projects/${selectedProject.id}/licenses/${licenseId}`, { method: "DELETE" });
+			const res = await fetch(
+				`/api/projects/${selectedProject.id}/licenses/${licenseId}`,
+				{ method: "DELETE" },
+			);
 			if (!res.ok) throw new Error("Failed");
 			toast({ title: t("unlinkSuccess") });
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch {
-			toast({ title: "Error", description: "Failed to unlink license", variant: "destructive" });
+			toast({
+				title: "Error",
+				description: "Failed to unlink license",
+				variant: "destructive",
+			});
 		}
 	};
 
 	const handleLinkSubcontractor = async () => {
 		if (!selectedProject || !selectedSubId) return;
 		try {
-			const res = await fetch(`/api/projects/${selectedProject.id}/subcontractors`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ subcontractorId: selectedSubId }),
-			});
+			const res = await fetch(
+				`/api/projects/${selectedProject.id}/subcontractors`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ subcontractorId: selectedSubId }),
+				},
+			);
 			if (!res.ok) {
 				const err = await res.json();
 				throw new Error(err.error || "Failed");
@@ -246,40 +289,78 @@ export function useProjects(t: (key: string) => string) {
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch (err: any) {
-			toast({ title: "Error", description: err.message, variant: "destructive" });
+			toast({
+				title: "Error",
+				description: err.message,
+				variant: "destructive",
+			});
 		}
 	};
 
 	const handleUnlinkSubcontractor = async (subcontractorId: string) => {
 		if (!selectedProject) return;
 		try {
-			const res = await fetch(`/api/projects/${selectedProject.id}/subcontractors/${subcontractorId}`, { method: "DELETE" });
+			const res = await fetch(
+				`/api/projects/${selectedProject.id}/subcontractors/${subcontractorId}`,
+				{ method: "DELETE" },
+			);
 			if (!res.ok) throw new Error("Failed");
 			toast({ title: t("subUnlinkSuccess") });
 			fetchProjectDetail(selectedProject.id);
 			fetchProjects();
 		} catch {
-			toast({ title: "Error", description: "Failed to unlink subcontractor", variant: "destructive" });
+			toast({
+				title: "Error",
+				description: "Failed to unlink subcontractor",
+				variant: "destructive",
+			});
 		}
 	};
 
 	return {
-		projects, loading, search, setSearch, statusFilter, setStatusFilter,
-		counts, stats,
-		projectDialogOpen, setProjectDialogOpen,
-		detailDialogOpen, setDetailDialogOpen,
-		deleteDialogOpen, setDeleteDialogOpen,
-		linkLicenseDialogOpen, setLinkLicenseDialogOpen,
-		linkSubDialogOpen, setLinkSubDialogOpen,
-		editingProject, selectedProject, deletingProject, setDeletingProject,
-		formData, setFormData, saving,
-		projectLicenses, projectSubs, orgLicenses, orgSubs,
-		selectedLicenseId, setSelectedLicenseId,
-		selectedSubId, setSelectedSubId,
-		detailTab, setDetailTab,
-		openNewProjectDialog, openEditProjectDialog, openDetailDialog,
-		handleSaveProject, handleDeleteProject,
-		handleLinkLicense, handleUnlinkLicense,
-		handleLinkSubcontractor, handleUnlinkSubcontractor,
+		projects,
+		loading,
+		search,
+		setSearch,
+		statusFilter,
+		setStatusFilter,
+		counts,
+		stats,
+		projectDialogOpen,
+		setProjectDialogOpen,
+		detailDialogOpen,
+		setDetailDialogOpen,
+		deleteDialogOpen,
+		setDeleteDialogOpen,
+		linkLicenseDialogOpen,
+		setLinkLicenseDialogOpen,
+		linkSubDialogOpen,
+		setLinkSubDialogOpen,
+		editingProject,
+		selectedProject,
+		deletingProject,
+		setDeletingProject,
+		formData,
+		setFormData,
+		saving,
+		projectLicenses,
+		projectSubs,
+		orgLicenses,
+		orgSubs,
+		selectedLicenseId,
+		setSelectedLicenseId,
+		selectedSubId,
+		setSelectedSubId,
+		detailTab,
+		setDetailTab,
+		openNewProjectDialog,
+		openEditProjectDialog,
+		openDetailDialog,
+		handleSaveProject,
+		handleDeleteProject,
+		handleLinkLicense,
+		handleUnlinkLicense,
+		handleLinkSubcontractor,
+		handleUnlinkSubcontractor,
 	};
 }

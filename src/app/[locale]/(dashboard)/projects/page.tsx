@@ -39,12 +39,22 @@ export default function ProjectsPage() {
 
 	return (
 		<div className="space-y-6">
-			<motion.div {...fadeIn} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+			<motion.div
+				{...fadeIn}
+				className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+			>
 				<div>
-					<h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{t("title")}</h1>
-					<p className="text-muted-foreground text-sm mt-1">{t("description")}</p>
+					<h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+						{t("title")}
+					</h1>
+					<p className="text-muted-foreground text-sm mt-1">
+						{t("description")}
+					</p>
 				</div>
-				<Button onClick={p.openNewProjectDialog} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-500/20 hover:shadow-lg hover:shadow-emerald-500/30 transition-all duration-300">
+				<Button
+					onClick={p.openNewProjectDialog}
+					className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-500/20 hover:shadow-lg hover:shadow-emerald-500/30 transition-all duration-300"
+				>
 					<Plus className="size-4 me-2" />
 					{t("newProject")}
 				</Button>
@@ -52,27 +62,82 @@ export default function ProjectsPage() {
 
 			<ProjectStatsCards counts={p.counts} stats={p.stats} t={t} />
 
-			<ProjectFilters search={p.search} onSearchChange={p.setSearch} statusFilter={p.statusFilter} onStatusFilterChange={p.setStatusFilter} t={t} />
-
-			<ProjectsGrid projects={p.projects} loading={p.loading} t={t} onOpenDetail={p.openDetailDialog} onNewProject={p.openNewProjectDialog} />
-
-			<ProjectFormDialog open={p.projectDialogOpen} onOpenChange={p.setProjectDialogOpen} editing={!!p.editingProject} formData={p.formData} onFormDataChange={p.setFormData} onSave={p.handleSaveProject} saving={p.saving} t={t} tc={tc} />
-
-			<ProjectDetailDialog
-				open={p.detailDialogOpen} onOpenChange={p.setDetailDialogOpen}
-				selectedProject={p.selectedProject} projectLicenses={p.projectLicenses}
-				projectSubs={p.projectSubs} detailTab={p.detailTab} onDetailTabChange={p.setDetailTab}
-				onUnlinkLicense={p.handleUnlinkLicense} onUnlinkSubcontractor={p.handleUnlinkSubcontractor}
-				onEdit={handleDetailEdit} onDelete={handleDetailDelete}
-				onOpenLinkLicenseDialog={() => p.setLinkLicenseDialogOpen(true)}
-				onOpenLinkSubDialog={() => p.setLinkSubDialogOpen(true)} t={t}
+			<ProjectFilters
+				search={p.search}
+				onSearchChange={p.setSearch}
+				statusFilter={p.statusFilter}
+				onStatusFilterChange={p.setStatusFilter}
+				t={t}
 			/>
 
-			<DeleteProjectDialog open={p.deleteDialogOpen} onOpenChange={p.setDeleteDialogOpen} onConfirm={p.handleDeleteProject} t={t} tc={tc} />
+			<ProjectsGrid
+				projects={p.projects}
+				loading={p.loading}
+				t={t}
+				onOpenDetail={p.openDetailDialog}
+				onNewProject={p.openNewProjectDialog}
+			/>
 
-			<LinkLicenseDialog open={p.linkLicenseDialogOpen} onOpenChange={p.setLinkLicenseDialogOpen} orgLicenses={p.orgLicenses} projectLicenses={p.projectLicenses} selectedLicenseId={p.selectedLicenseId} onSelectedLicenseIdChange={p.setSelectedLicenseId} onLink={p.handleLinkLicense} t={t} tc={tc} />
+			<ProjectFormDialog
+				open={p.projectDialogOpen}
+				onOpenChange={p.setProjectDialogOpen}
+				editing={!!p.editingProject}
+				formData={p.formData}
+				onFormDataChange={p.setFormData}
+				onSave={p.handleSaveProject}
+				saving={p.saving}
+				t={t}
+				tc={tc}
+			/>
 
-			<LinkSubcontractorDialog open={p.linkSubDialogOpen} onOpenChange={p.setLinkSubDialogOpen} orgSubs={p.orgSubs} projectSubs={p.projectSubs} selectedSubId={p.selectedSubId} onSelectedSubIdChange={p.setSelectedSubId} onLink={p.handleLinkSubcontractor} t={t} tc={tc} />
+			<ProjectDetailDialog
+				open={p.detailDialogOpen}
+				onOpenChange={p.setDetailDialogOpen}
+				selectedProject={p.selectedProject}
+				projectLicenses={p.projectLicenses}
+				projectSubs={p.projectSubs}
+				detailTab={p.detailTab}
+				onDetailTabChange={p.setDetailTab}
+				onUnlinkLicense={p.handleUnlinkLicense}
+				onUnlinkSubcontractor={p.handleUnlinkSubcontractor}
+				onEdit={handleDetailEdit}
+				onDelete={handleDetailDelete}
+				onOpenLinkLicenseDialog={() => p.setLinkLicenseDialogOpen(true)}
+				onOpenLinkSubDialog={() => p.setLinkSubDialogOpen(true)}
+				t={t}
+			/>
+
+			<DeleteProjectDialog
+				open={p.deleteDialogOpen}
+				onOpenChange={p.setDeleteDialogOpen}
+				onConfirm={p.handleDeleteProject}
+				t={t}
+				tc={tc}
+			/>
+
+			<LinkLicenseDialog
+				open={p.linkLicenseDialogOpen}
+				onOpenChange={p.setLinkLicenseDialogOpen}
+				orgLicenses={p.orgLicenses}
+				projectLicenses={p.projectLicenses}
+				selectedLicenseId={p.selectedLicenseId}
+				onSelectedLicenseIdChange={p.setSelectedLicenseId}
+				onLink={p.handleLinkLicense}
+				t={t}
+				tc={tc}
+			/>
+
+			<LinkSubcontractorDialog
+				open={p.linkSubDialogOpen}
+				onOpenChange={p.setLinkSubDialogOpen}
+				orgSubs={p.orgSubs}
+				projectSubs={p.projectSubs}
+				selectedSubId={p.selectedSubId}
+				onSelectedSubIdChange={p.setSelectedSubId}
+				onLink={p.handleLinkSubcontractor}
+				t={t}
+				tc={tc}
+			/>
 		</div>
 	);
 }
