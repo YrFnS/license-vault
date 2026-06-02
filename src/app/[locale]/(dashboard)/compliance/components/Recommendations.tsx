@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { Link } from '@/i18n/navigation';
-import { useRouter } from '@/i18n/navigation';
 import {
   RefreshCw,
   ShieldAlert,

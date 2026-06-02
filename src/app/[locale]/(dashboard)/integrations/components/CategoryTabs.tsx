@@ -1,8 +1,9 @@
 import { useTranslations } from 'next-intl';
-import { Link2, Search, CheckCircle2, Puzzle } from 'lucide-react';
+import { Link2, Search } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
-import { IntegrationData, CatalogIntegration, IntegrationStats, fadeIn } from './types';
+import { IntegrationData, CatalogIntegration, fadeIn } from './types';
+import { EmptyAllConnected, EmptyNoIntegrations } from './EmptyStates';
 import { matchesCategory } from './helpers';
 import { IntegrationCard } from './IntegrationCard';
 import { AvailableIntegrationCard } from './AvailableIntegrationCard';
@@ -110,23 +111,4 @@ export function CategoryTabs({
   );
 }
 
-function EmptyAllConnected() {
-  return (
-    <div className="text-center py-8 text-muted-foreground">
-      <CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-500" />
-      <p className="font-medium text-emerald-600 dark:text-emerald-400">All integrations connected</p>
-      <p className="text-sm">You&apos;ve connected all available integrations for this category</p>
-    </div>
-  );
-}
 
-function EmptyNoIntegrations() {
-  const t = useTranslations('integrations');
-  return (
-    <div className="text-center py-12 text-muted-foreground">
-      <Puzzle className="size-12 mx-auto mb-3 text-muted-foreground/50" />
-      <p className="font-medium text-lg">{t('noIntegrations')}</p>
-      <p className="text-sm mt-1">{t('noIntegrationsDesc')}</p>
-    </div>
-  );
-}

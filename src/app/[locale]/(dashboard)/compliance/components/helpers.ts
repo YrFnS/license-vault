@@ -1,10 +1,3 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 export function getScoreColor(score: number): string {
   if (score >= 80) return 'text-emerald-500';
   if (score >= 60) return 'text-amber-500';
@@ -17,12 +10,6 @@ export function getScoreLabel(score: number, t: (key: string) => string): string
   if (score >= 60) return t('scoreFair');
   if (score > 0) return t('scorePoor');
   return t('scoreNoData');
-}
-
-export function getScoreGradient(score: number): string {
-  if (score >= 80) return 'from-emerald-500 to-teal-500';
-  if (score >= 60) return 'from-amber-500 to-orange-500';
-  return 'from-red-500 to-rose-500';
 }
 
 export function getScoreStrokeGradient(score: number): string {
