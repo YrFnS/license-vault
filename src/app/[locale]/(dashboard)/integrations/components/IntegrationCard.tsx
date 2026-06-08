@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   RefreshCw,
@@ -41,7 +44,7 @@ export function IntegrationCard({
   onDisconnect,
 }: IntegrationCardProps) {
   const t = useTranslations('integrations');
-  const Icon = getIntegrationIcon(integration.type, catalog);
+  const IntegrationIcon = useMemo(() => getIntegrationIcon(integration.type, catalog), [integration.type, catalog]);
   const availableDef = catalog.find((a) => a.type === integration.type);
 
   return (
@@ -59,7 +62,7 @@ export function IntegrationCard({
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 shrink-0">
-                  <Icon className="size-5 text-emerald-600 dark:text-emerald-400" />
+                  <IntegrationIcon className="size-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-semibold text-sm truncate">{integration.name}</h3>
