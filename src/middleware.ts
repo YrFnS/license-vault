@@ -1,7 +1,6 @@
 import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const intlMiddleware = createMiddleware(routing);
 
@@ -189,7 +188,24 @@ export default function middleware(request: NextRequest) {
 	}
 
 	// ── Non-API Routes: Intl + Security Headers ─────────────────────────────
-	const response = intlMiddleware(request);
+	const nonce = btoa(crypto.randomUUID());
+	const contentSecurityPolicy = [
+		"default-src 'self'",
+		`script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob:",
+		"font-src 'self' data:",
+		`connect-src 'self' https://${AI_DOMAIN}`,
+		"frame-ancestors 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+	].join("; ");
+	const requestHeaders = new Headers(request.headers);
+	requestHeaders.set("x-nonce", nonce);
+	requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
+	const response = intlMiddleware(
+		new NextRequest(request, { headers: requestHeaders }),
+	);
 
 	// Security headers
 	response.headers.set("X-Content-Type-Options", "nosniff");
@@ -206,7 +222,7 @@ export default function middleware(request: NextRequest) {
 	);
 	response.headers.set(
 		"Content-Security-Policy",
-		`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://${AI_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self';`,
+		contentSecurityPolicy,
 	);
 
 	return response;

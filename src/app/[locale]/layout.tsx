@@ -1,6 +1,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Providers } from '@/components/Providers';
 import { routing } from '@/i18n/routing';
@@ -30,6 +31,7 @@ export default async function LocaleLayout({
   }
 
   const messages = await getMessages();
+  const nonce = (await headers()).get('x-nonce') || undefined;
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
 
   return (
@@ -45,7 +47,7 @@ export default async function LocaleLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers>
+        <Providers nonce={nonce}>
           <NextIntlClientProvider messages={messages}>
             {children}
           </NextIntlClientProvider>
