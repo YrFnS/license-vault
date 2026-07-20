@@ -92,7 +92,9 @@ async function main() {
 	// ── 4. Demo organization ───────────────────────────────────────────────
 	const demoOrg = await prisma.organization.upsert({
 		where: { id: "demo-org" },
-		update: {},
+		update: {
+			logoUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
+		},
 		create: {
 			id: "demo-org",
 			name: "Acme Construction Co.",
@@ -100,6 +102,7 @@ async function main() {
 			primaryState: "CA",
 			plan: "professional",
 			companyName: "Acme Construction Co.",
+			logoUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
 			primaryColor: "#10b981",
 		},
 	});
