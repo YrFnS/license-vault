@@ -97,6 +97,10 @@ export async function POST(
       );
     }
 
+    const userId = sessionUser.id;
+    const userEmail = sessionUser.email;
+    const userName = sessionUser.name;
+
     const { token } = await params;
     const invitation = await resolveInvitation(token);
     if (!invitation) {
@@ -107,8 +111,7 @@ export async function POST(
     }
 
     if (
-      sessionUser.email.toLowerCase() !==
-      invitation.membership.email.toLowerCase()
+      userEmail.toLowerCase() !== invitation.membership.email.toLowerCase()
     ) {
       return NextResponse.json(
         { error: "This invitation belongs to a different email address." },
@@ -117,7 +120,7 @@ export async function POST(
     }
     if (
       invitation.membership.userId &&
-      invitation.membership.userId !== sessionUser.id
+      invitation.membership.userId !== userId
     ) {
       return NextResponse.json(
         { error: "This invitation is linked to a different account." },
@@ -129,10 +132,10 @@ export async function POST(
       const accepted = await transaction.orgMember.update({
         where: { id: invitation.membership.id },
         data: {
-          userId: sessionUser.id,
+          userId,
           fullName:
             invitation.membership.fullName ||
-            sessionUser.name ||
+            userName ||
             invitation.membership.email,
           joinedAt: new Date(),
         },
@@ -142,13 +145,13 @@ export async function POST(
         where: {
           orgId_userId: {
             orgId: invitation.membership.orgId,
-            userId: sessionUser.id,
+            userId,
           },
         },
         update: {},
         create: {
           orgId: invitation.membership.orgId,
-          userId: sessionUser.id,
+          userId,
           alert60Days: true,
           alert30Days: true,
           alert5Days: true,
@@ -160,7 +163,7 @@ export async function POST(
       await transaction.auditLog.create({
         data: {
           orgId: invitation.membership.orgId,
-          userId: sessionUser.id,
+          userId,
           action: "accept_invite",
           entityType: "member",
           entityId: accepted.id,
