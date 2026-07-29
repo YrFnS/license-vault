@@ -1,135 +1,155 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { getOrgContext } from "@/lib/org-context";
+import { calculateProjectCompliance } from "@/lib/project-compliance";
 
-// GET: Get project compliance details
+function licenseStatus(expirationDate: Date, now: Date, warningDate: Date) {
+  if (expirationDate < now) return "expired";
+  if (expirationDate <= warningDate) return "expiring_soon";
+  return "compliant";
+}
+
+function subcontractorStatus(input: {
+  projectStatus: string;
+  status: string;
+  complianceStatus: string;
+  licenseExpiry: Date | null;
+  insuranceExpiry: Date | null;
+}, now: Date) {
+  if (input.status !== "active") return "inactive";
+  if (input.licenseExpiry && input.licenseExpiry < now) return "license_expired";
+  if (input.insuranceExpiry && input.insuranceExpiry < now) {
+    return "insurance_expired";
+  }
+  return input.projectStatus !== "pending"
+    ? input.projectStatus
+    : input.complianceStatus;
+}
+
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const project = await db.project.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId },
+      include: {
+        projectLicenses: { include: { license: true } },
+        projectSubs: { include: { subcontractor: true } },
+      },
     });
-
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Get linked licenses with details
-    const projectLicenses = await db.projectLicense.findMany({
-      where: { projectId: id },
-      include: {
-        license: true,
-      },
-    });
-
-    // Get linked subcontractors with details
-    const projectSubs = await db.projectSubcontractor.findMany({
-      where: { projectId: id },
-      include: {
-        subcontractor: true,
-      },
-    });
-
-    // Compute license compliance
     const now = new Date();
-    const thirtyDaysFromNow = new Date();
+    const thirtyDaysFromNow = new Date(now);
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    const licenseCompliance = projectLicenses.map((pl) => {
-      const expirationDate = pl.license.expirationDate;
-      let status = 'compliant';
-      if (expirationDate <= now) {
-        status = 'expired';
-      } else if (expirationDate <= thirtyDaysFromNow) {
-        status = 'expiring_soon';
-      }
-
-      return {
-        id: pl.id,
-        licenseId: pl.licenseId,
-        licenseName: pl.license.name,
-        licenseType: pl.license.type,
-        licenseNumber: pl.license.licenseNumber,
-        expirationDate: pl.license.expirationDate,
-        status,
-        required: pl.required,
-        verified: pl.verified,
-        notes: pl.notes,
-      };
-    });
-
-    const compliantCount = licenseCompliance.filter((l) => l.status === 'compliant').length;
-    const expiringCount = licenseCompliance.filter((l) => l.status === 'expiring_soon').length;
-    const expiredCount = licenseCompliance.filter((l) => l.status === 'expired').length;
-
-    // Compute subcontractor compliance
-    const subCompliance = projectSubs.map((ps) => ({
-      id: ps.id,
-      subcontractorId: ps.subcontractorId,
-      companyName: ps.subcontractor.companyName,
-      complianceStatus: ps.complianceStatus,
-      role: ps.role,
-      licenseExpiry: ps.subcontractor.licenseExpiry,
-      insuranceExpiry: ps.subcontractor.insuranceExpiry,
-      insuranceStatus: ps.subcontractor.insuranceStatus,
+    const licenses = project.projectLicenses.map((link) => ({
+      id: link.id,
+      licenseId: link.licenseId,
+      licenseName: link.license.name,
+      licenseType: link.license.type,
+      licenseNumber: link.license.licenseNumber,
+      expirationDate: link.license.expirationDate,
+      status: licenseStatus(
+        link.license.expirationDate,
+        now,
+        thirtyDaysFromNow,
+      ),
+      required: link.required,
+      verified: link.verified,
+      verifiedAt: link.verifiedAt,
+      notes: link.notes,
     }));
 
-    const compliantSubs = subCompliance.filter((s) => s.complianceStatus === 'compliant').length;
-    const pendingSubs = subCompliance.filter((s) => s.complianceStatus === 'pending').length;
-    const nonCompliantSubs = subCompliance.filter((s) => s.complianceStatus === 'non_compliant').length;
+    const subcontractors = project.projectSubs.map((link) => ({
+      id: link.id,
+      subcontractorId: link.subcontractorId,
+      companyName: link.subcontractor.companyName,
+      complianceStatus: subcontractorStatus(
+        {
+          projectStatus: link.complianceStatus,
+          status: link.subcontractor.status,
+          complianceStatus: link.subcontractor.complianceStatus,
+          licenseExpiry: link.subcontractor.licenseExpiry,
+          insuranceExpiry: link.subcontractor.insuranceExpiry,
+        },
+        now,
+      ),
+      role: link.role,
+      lastChecked: link.lastChecked,
+      licenseExpiry: link.subcontractor.licenseExpiry,
+      insuranceExpiry: link.subcontractor.insuranceExpiry,
+      insuranceStatus: link.subcontractor.insuranceStatus,
+    }));
 
-    // Overall compliance score
-    const totalLicenses = licenseCompliance.length;
-    const complianceScore = totalLicenses > 0
-      ? Math.round((compliantCount / totalLicenses) * 100)
-      : 100;
-
-    // Update stored score
-    await db.project.update({
-      where: { id },
-      data: { complianceScore },
+    const compliance = calculateProjectCompliance({
+      projectLicenses: project.projectLicenses,
+      projectSubs: project.projectSubs,
     });
 
-    return NextResponse.json({
-      projectId: id,
-      projectName: project.name,
-      complianceScore,
-      licenseCompliance: {
-        total: totalLicenses,
-        compliant: compliantCount,
-        expiring: expiringCount,
-        expired: expiredCount,
-        licenses: licenseCompliance,
+    return NextResponse.json(
+      {
+        projectId: project.id,
+        projectName: project.name,
+        complianceScore: compliance.score,
+        complianceConfigured: compliance.configured,
+        atRisk: compliance.atRisk,
+        requiredItems: compliance.requiredItems,
+        itemsNeedingAction: compliance.itemsNeedingAction,
+        licenseCompliance: {
+          total: licenses.length,
+          required: licenses.filter((license) => license.required).length,
+          compliant: licenses.filter(
+            (license) => license.status === "compliant" && license.verified,
+          ).length,
+          expiring: licenses.filter(
+            (license) => license.status === "expiring_soon",
+          ).length,
+          expired: licenses.filter((license) => license.status === "expired").length,
+          unverified: licenses.filter(
+            (license) => license.required && !license.verified,
+          ).length,
+          licenses,
+        },
+        subcontractorCompliance: {
+          total: subcontractors.length,
+          compliant: subcontractors.filter((sub) =>
+            ["compliant", "approved", "active"].includes(
+              sub.complianceStatus,
+            ),
+          ).length,
+          pending: subcontractors.filter((sub) =>
+            ["pending", "review", "unknown"].includes(
+              sub.complianceStatus,
+            ),
+          ).length,
+          nonCompliant: subcontractors.filter(
+            (sub) =>
+              ![
+                "compliant",
+                "approved",
+                "active",
+                "pending",
+                "review",
+                "unknown",
+              ].includes(sub.complianceStatus),
+          ).length,
+          subcontractors,
+        },
       },
-      subcontractorCompliance: {
-        total: subCompliance.length,
-        compliant: compliantSubs,
-        pending: pendingSubs,
-        nonCompliant: nonCompliantSubs,
-        subcontractors: subCompliance,
-      },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get project compliance error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get project compliance error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
