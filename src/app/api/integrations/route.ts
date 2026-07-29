@@ -1,119 +1,194 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  decryptIntegrationConfig,
+  encryptIntegrationConfig,
+  getSafeIntegrationConfig,
+  hasAutomaticSyncAdapter,
+  integrationConfigSchema,
+  testIntegrationConnection,
+} from "@/lib/integration-config";
+
+export const runtime = "nodejs";
 
 const createSchema = z.object({
-  name: z.string().min(1),
-  type: z.string().min(1),
-  category: z.string().min(1),
-  config: z.string().optional(),
+  name: z.string().trim().min(1).max(200),
+  type: z.string().trim().min(1).max(100).regex(/^[a-z0-9_-]+$/),
+  category: z.enum(["construction_erp", "accounting", "hris", "ats", "custom"]),
+  config: integrationConfigSchema,
 });
 
-// GET: List all integrations for org
+function serializeIntegration<
+  T extends {
+    config: string | null;
+    type: string;
+    status: string;
+    lastError: string | null;
+  },
+>(integration: T) {
+  const decrypted = decryptIntegrationConfig(integration.config);
+  const safeConfig = getSafeIntegrationConfig(decrypted);
+  return {
+    ...integration,
+    config: JSON.stringify(safeConfig),
+    status: safeConfig.credentialConfigured
+      ? integration.status
+      : "disconnected",
+    lastError: safeConfig.credentialConfigured
+      ? integration.lastError
+      : "Reconnect this integration to replace the legacy or missing credential.",
+    syncAvailable: hasAutomaticSyncAdapter(integration.type),
+  };
+}
+
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    const integrations = await db.integration.findMany({
-      where: { orgId: orgMember.orgId, isActive: true },
+    const records = await db.integration.findMany({
+      where: { orgId: context.orgId, isActive: true },
       include: {
         syncLogs: {
-          orderBy: { startedAt: 'desc' },
-          take: 5,
+          orderBy: { startedAt: "desc" },
+          take: 10,
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
+    const integrations = records.map(serializeIntegration);
 
     const stats = {
       total: integrations.length,
-      connected: integrations.filter((i) => i.status === 'connected').length,
-      disconnected: integrations.filter((i) => i.status === 'disconnected').length,
-      error: integrations.filter((i) => i.status === 'error').length,
-      syncing: integrations.filter((i) => i.status === 'syncing').length,
-      lastSyncAt: integrations.reduce((latest: Date | null, i) => {
-        if (!i.lastSyncAt) return latest;
-        if (!latest) return i.lastSyncAt;
-        return i.lastSyncAt > latest ? i.lastSyncAt : latest;
+      connected: integrations.filter(
+        (integration) => integration.status === "connected",
+      ).length,
+      disconnected: integrations.filter(
+        (integration) => integration.status === "disconnected",
+      ).length,
+      error: integrations.filter((integration) => integration.status === "error")
+        .length,
+      syncing: integrations.filter(
+        (integration) => integration.status === "syncing",
+      ).length,
+      lastSyncAt: integrations.reduce<Date | null>((latest, integration) => {
+        if (!integration.lastSyncAt) return latest;
+        if (!latest) return integration.lastSyncAt;
+        return integration.lastSyncAt > latest
+          ? integration.lastSyncAt
+          : latest;
       }, null),
-      totalSyncErrors: integrations.reduce((sum, i) => sum + i.errorCount, 0),
+      totalSyncErrors: integrations.reduce(
+        (total, integration) => total + integration.errorCount,
+        0,
+      ),
     };
 
-    return NextResponse.json({ integrations, stats });
+    return NextResponse.json(
+      { integrations, stats },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Error fetching integrations:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error fetching integrations:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// POST: Create new integration (connect)
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can connect integrations." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    const result = createSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
     }
 
-    const body = await request.json();
-    const validated = createSchema.parse(body);
-
-    // Check for duplicate type
     const existing = await db.integration.findFirst({
-      where: { orgId: orgMember.orgId, type: validated.type, isActive: true },
+      where: {
+        orgId: context.orgId,
+        type: result.data.type,
+        isActive: true,
+      },
+      select: { id: true },
     });
     if (existing) {
-      return NextResponse.json({ error: 'Integration of this type already exists' }, { status: 409 });
+      return NextResponse.json(
+        { error: "An active integration of this type already exists." },
+        { status: 409 },
+      );
     }
 
-    const integration = await db.integration.create({
-      data: {
-        orgId: orgMember.orgId,
-        name: validated.name,
-        type: validated.type,
-        category: validated.category,
-        status: 'connected',
-        config: validated.config || null,
-        lastSyncAt: new Date(),
-        lastSyncStatus: 'success',
-      },
+    const connection = await testIntegrationConnection(result.data.config);
+    if (!connection.success) {
+      return NextResponse.json(
+        { error: connection.message, connection },
+        { status: 422 },
+      );
+    }
+
+    const integration = await db.$transaction(async (transaction) => {
+      const created = await transaction.integration.create({
+        data: {
+          orgId: context.orgId,
+          name: sanitizeString(result.data.name),
+          type: result.data.type,
+          category: result.data.category,
+          status: "connected",
+          config: encryptIntegrationConfig(result.data.config),
+          lastSyncAt: null,
+          lastSyncStatus: "connection_verified",
+          lastError: null,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "integration_connected",
+          entityType: "integration",
+          entityId: created.id,
+          entityName: created.name,
+          details: JSON.stringify({
+            type: created.type,
+            category: created.category,
+            endpoint: result.data.config.baseUrl,
+            latencyMs: connection.latencyMs,
+            automaticSyncAvailable: hasAutomaticSyncAdapter(created.type),
+          }),
+        },
+      });
+      return created;
     });
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'integration_connected',
-        entityType: 'integration',
-        entityId: integration.id,
-        entityName: integration.name,
-        details: `Connected ${integration.name} (${integration.type})`,
+    return NextResponse.json(
+      {
+        integration: serializeIntegration({ ...integration, syncLogs: [] }),
+        connection,
       },
-    });
-
-    return NextResponse.json({ integration }, { status: 201 });
+      { status: 201 },
+    );
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Validation error', details: error.issues }, { status: 400 });
-    }
-    console.error('Error creating integration:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error creating integration:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
