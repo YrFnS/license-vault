@@ -1,80 +1,168 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { refreshProjectCompliance } from "@/lib/project-compliance";
 
-// Helper to compute compliance score
-async function computeComplianceScore(projectId: string): Promise<number> {
-  const projectLicenses = await db.projectLicense.findMany({
-    where: { projectId },
+const updateLinkSchema = z
+  .object({
+    required: z.boolean().optional(),
+    verified: z.boolean().optional(),
+    notes: z.string().trim().max(2_000).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "No changes supplied");
+
+async function getProjectAndLink(
+  projectId: string,
+  licenseId: string,
+  orgId: string,
+) {
+  const project = await db.project.findFirst({
+    where: { id: projectId, orgId },
+    select: { id: true, name: true },
+  });
+  if (!project) return null;
+
+  const link = await db.projectLicense.findUnique({
+    where: { projectId_licenseId: { projectId, licenseId } },
     include: {
-      license: { select: { expirationDate: true } },
+      license: { select: { name: true, licenseNumber: true } },
     },
   });
-
-  if (projectLicenses.length === 0) return 100;
-
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-  const compliant = projectLicenses.filter(
-    (pl) => pl.license.expirationDate > thirtyDaysFromNow
-  ).length;
-
-  return Math.round((compliant / projectLicenses.length) * 100);
+  if (!link) return null;
+  return { project, link };
 }
 
-// DELETE: Unlink a license from a project
-export async function DELETE(
+export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string; licenseId: string }> }
+  {
+    params,
+  }: { params: Promise<{ id: string; licenseId: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const { id: projectId, licenseId } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions.' },
-        { status: 403 }
+        { error: "Only organization owners and admins can update project licenses." },
+        { status: 403 },
       );
     }
 
-    const existing = await db.projectLicense.findUnique({
-      where: { projectId_licenseId: { projectId, licenseId } },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'License link not found' }, { status: 404 });
+    const { id: projectId, licenseId } = await params;
+    const scoped = await getProjectAndLink(projectId, licenseId, context.orgId);
+    if (!scoped) {
+      return NextResponse.json({ error: "Project license link not found" }, { status: 404 });
     }
 
-    await db.projectLicense.delete({
-      where: { id: existing.id },
+    const result = updateLinkSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const updatedLink = await db.$transaction(async (transaction) => {
+      const updated = await transaction.projectLicense.update({
+        where: { id: scoped.link.id },
+        data: {
+          ...(result.data.required !== undefined
+            ? { required: result.data.required }
+            : {}),
+          ...(result.data.verified !== undefined
+            ? {
+                verified: result.data.verified,
+                verifiedAt: result.data.verified ? new Date() : null,
+              }
+            : {}),
+          ...(result.data.notes !== undefined
+            ? {
+                notes: result.data.notes
+                  ? sanitizeString(result.data.notes)
+                  : null,
+              }
+            : {}),
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "update_project_license",
+          entityType: "project",
+          entityId: scoped.project.id,
+          entityName: scoped.project.name,
+          details: JSON.stringify({
+            licenseId,
+            licenseNumber: scoped.link.license.licenseNumber,
+            updatedFields: Object.keys(result.data),
+          }),
+        },
+      });
+      return updated;
     });
 
-    // Recalculate compliance score
-    const complianceScore = await computeComplianceScore(projectId);
-    await db.project.update({
-      where: { id: projectId },
-      data: { complianceScore },
-    });
-
-    return NextResponse.json({ success: true, complianceScore });
+    const compliance = await refreshProjectCompliance(projectId, context.orgId);
+    return NextResponse.json({ projectLicense: updatedLink, compliance });
   } catch (error) {
-    console.error('Unlink license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Update project license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  {
+    params,
+  }: { params: Promise<{ id: string; licenseId: string }> },
+) {
+  try {
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can remove project licenses." },
+        { status: 403 },
+      );
+    }
+
+    const { id: projectId, licenseId } = await params;
+    const scoped = await getProjectAndLink(projectId, licenseId, context.orgId);
+    if (!scoped) {
+      return NextResponse.json({ error: "Project license link not found" }, { status: 404 });
+    }
+
+    await db.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "remove_project_license",
+          entityType: "project",
+          entityId: scoped.project.id,
+          entityName: scoped.project.name,
+          details: JSON.stringify({
+            licenseId,
+            licenseNumber: scoped.link.license.licenseNumber,
+          }),
+        },
+      });
+      await transaction.projectLicense.delete({ where: { id: scoped.link.id } });
+    });
+
+    const compliance = await refreshProjectCompliance(projectId, context.orgId);
+    return NextResponse.json({ success: true, compliance });
+  } catch (error) {
+    console.error("Unlink license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
