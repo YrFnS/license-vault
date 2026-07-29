@@ -173,7 +173,7 @@ export default function middleware(request: NextRequest) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     `connect-src 'self' https://${AI_DOMAIN}`,
     "frame-ancestors 'none'",
