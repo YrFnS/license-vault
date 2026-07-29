@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Building2, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 interface OrganizationOption {
@@ -19,7 +18,6 @@ export function OrganizationSwitcher({
   className?: string;
 }) {
   const { data: session, update } = useSession();
-  const router = useRouter();
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
@@ -81,7 +79,7 @@ export function OrganizationSwitcher({
     setSwitching(true);
     try {
       await update({ activeOrgId: orgId });
-      router.refresh();
+      window.location.reload();
     } finally {
       setSwitching(false);
     }
