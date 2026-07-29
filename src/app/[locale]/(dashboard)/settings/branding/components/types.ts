@@ -9,7 +9,7 @@ export interface BrandingColors {
 export interface BrandingFonts {
   heading: string;
   body: string;
-  scale: 'compact' | 'normal' | 'large';
+  scale: "compact" | "normal" | "large";
 }
 
 export interface BrandingLoginPage {
@@ -45,8 +45,6 @@ export interface BrandingConfig {
   emailTemplates: BrandingEmailTemplates;
   portal: BrandingPortal;
   customCSS: string;
-  customHeadJS: string;
-  customBodyJS: string;
   tagline?: string;
 }
 
