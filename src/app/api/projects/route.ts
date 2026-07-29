@@ -1,261 +1,229 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-import { sanitizeString } from '@/lib/sanitize';
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { calculateProjectCompliance } from "@/lib/project-compliance";
 
-// GET: List projects for the user's organization
+const PROJECT_STATUSES = ["active", "completed", "on_hold"] as const;
+
+function parsePositiveInt(value: string | null, fallback: number, max: number): number {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
+function validDate(value: string): boolean {
+  return Number.isFinite(new Date(value).getTime());
+}
+
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
-    const statusFilter = searchParams.get('status') || undefined;
-    const search = searchParams.get('search') || undefined;
+    const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
+    const limit = parsePositiveInt(searchParams.get("limit"), 20, 100);
+    const statusFilter = searchParams.get("status");
+    const search = searchParams.get("search")?.trim();
 
-    // Build where clause
-    const where: any = { orgId: orgMember.orgId };
-
-    if (statusFilter) {
+    const where: Prisma.ProjectWhereInput = { orgId: context.orgId };
+    if (
+      statusFilter &&
+      (PROJECT_STATUSES as readonly string[]).includes(statusFilter)
+    ) {
       where.status = statusFilter;
     }
-
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { clientName: { contains: search } },
-        { location: { contains: search } },
+        { name: { contains: search, mode: "insensitive" } },
+        { clientName: { contains: search, mode: "insensitive" } },
+        { location: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    const total = await db.project.count({ where });
-
-    const projects = await db.project.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        _count: {
-          select: {
-            projectLicenses: true,
-            projectSubs: true,
-          },
-        },
-      },
-    });
-
-    // Compute compliance score for each project
-    const projectsWithScore = await Promise.all(
-      projects.map(async (project) => {
-        const projectLicenses = await db.projectLicense.findMany({
-          where: { projectId: project.id },
+    const [total, projects, countAll, countActive, countCompleted, countOnHold, average, atRiskCount] =
+      await Promise.all([
+        db.project.count({ where }),
+        db.project.findMany({
+          where,
+          orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+          skip: (page - 1) * limit,
+          take: limit,
           include: {
-            license: {
-              select: {
-                expirationDate: true,
+            projectLicenses: {
+              include: {
+                license: { select: { expirationDate: true } },
+              },
+            },
+            projectSubs: {
+              include: {
+                subcontractor: {
+                  select: {
+                    status: true,
+                    complianceStatus: true,
+                    licenseExpiry: true,
+                    insuranceExpiry: true,
+                  },
+                },
               },
             },
           },
-        });
+        }),
+        db.project.count({ where: { orgId: context.orgId } }),
+        db.project.count({ where: { orgId: context.orgId, status: "active" } }),
+        db.project.count({ where: { orgId: context.orgId, status: "completed" } }),
+        db.project.count({ where: { orgId: context.orgId, status: "on_hold" } }),
+        db.project.aggregate({
+          where: { orgId: context.orgId },
+          _avg: { complianceScore: true },
+        }),
+        db.project.count({
+          where: { orgId: context.orgId, complianceScore: { lt: 80 } },
+        }),
+      ]);
 
-        let complianceScore = project.complianceScore;
-        if (projectLicenses.length > 0) {
-          const now = new Date();
-          const thirtyDaysFromNow = new Date();
-          thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-          const compliant = projectLicenses.filter(
-            (pl) => pl.license.expirationDate > thirtyDaysFromNow
-          ).length;
-          complianceScore = Math.round((compliant / projectLicenses.length) * 100);
-        } else {
-          complianceScore = 100; // No licenses linked = fully compliant
-        }
+    const projectsWithScore = projects.map((project) => {
+      const compliance = calculateProjectCompliance({
+        projectLicenses: project.projectLicenses,
+        projectSubs: project.projectSubs,
+      });
+      return {
+        ...project,
+        complianceScore: compliance.score,
+        complianceConfigured: compliance.configured,
+        itemsNeedingAction: compliance.itemsNeedingAction,
+        licenseCount: project.projectLicenses.length,
+        subcontractorCount: project.projectSubs.length,
+      };
+    });
 
-        return {
-          ...project,
-          complianceScore,
-          licenseCount: project._count.projectLicenses,
-          subcontractorCount: project._count.projectSubs,
-        };
-      })
-    );
-
-    // Compute counts
-    const orgWhere = { orgId: orgMember.orgId };
-    const [countAll, countActive, countCompleted, countOnHold] = await Promise.all([
-      db.project.count({ where: orgWhere }),
-      db.project.count({ where: { ...orgWhere, status: 'active' } }),
-      db.project.count({ where: { ...orgWhere, status: 'completed' } }),
-      db.project.count({ where: { ...orgWhere, status: 'on_hold' } }),
-    ]);
-
-    // Compute average compliance score
-    const allProjects = await db.project.findMany({
-      where: orgWhere,
-      include: {
-        projectLicenses: {
-          include: {
-            license: { select: { expirationDate: true } },
-          },
+    return NextResponse.json(
+      {
+        projects: projectsWithScore,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        counts: {
+          all: countAll,
+          active: countActive,
+          completed: countCompleted,
+          on_hold: countOnHold,
+        },
+        stats: {
+          avgCompliance: Math.round(average._avg.complianceScore ?? 100),
+          atRiskCount,
         },
       },
-    });
-
-    let avgCompliance = 100;
-    let atRiskCount = 0;
-    if (allProjects.length > 0) {
-      const scores = allProjects.map((p) => {
-        if (p.projectLicenses.length === 0) return 100;
-        const now = new Date();
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        const compliant = p.projectLicenses.filter(
-          (pl) => pl.license.expirationDate > thirtyDaysFromNow
-        ).length;
-        return Math.round((compliant / p.projectLicenses.length) * 100);
-      });
-      avgCompliance = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-      atRiskCount = scores.filter((s) => s < 60).length;
-    }
-
-    return NextResponse.json({
-      projects: projectsWithScore,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-      counts: {
-        all: countAll,
-        active: countActive,
-        completed: countCompleted,
-        on_hold: countOnHold,
-      },
-      stats: {
-        avgCompliance,
-        atRiskCount,
-      },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get projects error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get projects error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const createProjectSchema = z.object({
-  name: z.string().min(1, 'Project name is required'),
-  description: z.string().optional(),
-  clientName: z.string().optional(),
-  clientEmail: z.string().optional(),
-  location: z.string().optional(),
-  state: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  status: z.enum(['active', 'completed', 'on_hold']).optional().default('active'),
-  requiredLicenses: z.string().optional(),
-  requiredInsurance: z.string().optional(),
-});
+const createProjectSchema = z
+  .object({
+    name: z.string().trim().min(1, "Project name is required").max(200),
+    description: z.string().trim().max(5_000).optional(),
+    clientName: z.string().trim().max(200).optional(),
+    clientEmail: z.string().trim().email().max(320).or(z.literal("")).optional(),
+    location: z.string().trim().max(500).optional(),
+    state: z.string().trim().max(100).optional(),
+    startDate: z.string().refine(validDate, "Start date is invalid").optional(),
+    endDate: z.string().refine(validDate, "End date is invalid").optional(),
+    status: z.enum(PROJECT_STATUSES).default("active"),
+    requiredLicenses: z.string().max(20_000).optional(),
+    requiredInsurance: z.string().max(20_000).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.startDate &&
+      value.endDate &&
+      new Date(value.endDate) < new Date(value.startDate)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "End date must be on or after the start date",
+      });
+    }
+  });
 
-// POST: Create a new project
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can create projects.' },
-        { status: 403 }
+        { error: "Only organization owners and admins can create projects." },
+        { status: 403 },
       );
     }
 
-    const body = await request.json();
-    const result = createProjectSchema.safeParse(body);
-
+    const result = createProjectSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
       );
     }
 
-    const data = result.data;
-
-    // Sanitize string inputs
-    const sanitizedName = sanitizeString(data.name);
-    const sanitizedDescription = data.description ? sanitizeString(data.description) : null;
-    const sanitizedClientName = data.clientName ? sanitizeString(data.clientName) : null;
-    const sanitizedClientEmail = data.clientEmail || null;
-    const sanitizedLocation = data.location ? sanitizeString(data.location) : null;
-    const sanitizedState = data.state ? sanitizeString(data.state) : null;
-    const sanitizedRequiredLicenses = data.requiredLicenses ? sanitizeString(data.requiredLicenses) : null;
-    const sanitizedRequiredInsurance = data.requiredInsurance ? sanitizeString(data.requiredInsurance) : null;
-
-    const project = await db.project.create({
-      data: {
-        orgId: orgMember.orgId,
-        name: sanitizedName,
-        description: sanitizedDescription,
-        clientName: sanitizedClientName,
-        clientEmail: sanitizedClientEmail,
-        location: sanitizedLocation,
-        state: sanitizedState,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        endDate: data.endDate ? new Date(data.endDate) : null,
-        status: data.status,
-        requiredLicenses: sanitizedRequiredLicenses,
-        requiredInsurance: sanitizedRequiredInsurance,
-        complianceScore: 100,
-      },
-    });
-
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'create',
-        entityType: 'project',
-        entityId: project.id,
-        entityName: project.name,
-        details: `Created project: ${project.name}`,
-      },
+    const value = result.data;
+    const project = await db.$transaction(async (transaction) => {
+      const created = await transaction.project.create({
+        data: {
+          orgId: context.orgId,
+          name: sanitizeString(value.name),
+          description: value.description
+            ? sanitizeString(value.description)
+            : null,
+          clientName: value.clientName ? sanitizeString(value.clientName) : null,
+          clientEmail: value.clientEmail?.toLowerCase() || null,
+          location: value.location ? sanitizeString(value.location) : null,
+          state: value.state ? sanitizeString(value.state) : null,
+          startDate: value.startDate ? new Date(value.startDate) : null,
+          endDate: value.endDate ? new Date(value.endDate) : null,
+          status: value.status,
+          requiredLicenses: value.requiredLicenses
+            ? sanitizeString(value.requiredLicenses)
+            : null,
+          requiredInsurance: value.requiredInsurance
+            ? sanitizeString(value.requiredInsurance)
+            : null,
+          complianceScore: 100,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "create",
+          entityType: "project",
+          entityId: created.id,
+          entityName: created.name,
+          details: JSON.stringify({ status: created.status }),
+        },
+      });
+      return created;
     });
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {
-    console.error('Create project error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Create project error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
