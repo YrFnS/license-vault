@@ -1,3 +1,5 @@
+import { db } from "@/lib/db";
+
 interface ProjectLicenseComplianceInput {
   required: boolean;
   verified: boolean;
@@ -92,4 +94,43 @@ export function calculateProjectCompliance(input: {
     requiredItems: scores.length,
     itemsNeedingAction: scores.filter((itemScore) => itemScore < 100).length,
   };
+}
+
+export async function refreshProjectCompliance(
+  projectId: string,
+  orgId: string,
+): Promise<ProjectComplianceResult | null> {
+  const project = await db.project.findFirst({
+    where: { id: projectId, orgId },
+    include: {
+      projectLicenses: {
+        include: { license: { select: { expirationDate: true } } },
+      },
+      projectSubs: {
+        include: {
+          subcontractor: {
+            select: {
+              status: true,
+              complianceStatus: true,
+              licenseExpiry: true,
+              insuranceExpiry: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!project) return null;
+
+  const compliance = calculateProjectCompliance({
+    projectLicenses: project.projectLicenses,
+    projectSubs: project.projectSubs,
+  });
+  if (project.complianceScore !== compliance.score) {
+    await db.project.update({
+      where: { id: project.id },
+      data: { complianceScore: compliance.score },
+    });
+  }
+  return compliance;
 }
