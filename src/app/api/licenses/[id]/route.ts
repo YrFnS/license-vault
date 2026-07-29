@@ -1,171 +1,184 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-import { sanitizeString } from '@/lib/sanitize';
-import { dispatchWebhook } from '@/lib/webhook-delivery';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { sanitizeString } from "@/lib/sanitize";
+import { dispatchWebhook } from "@/lib/webhook-delivery";
 
-function computeLicenseStatus(expirationDate: Date): string {
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
+function computeLicenseStatus(expirationDate: Date, now = new Date()): string {
+  const thirtyDaysFromNow = new Date(now);
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-
-  if (expirationDate < now) return 'expired';
-  if (expirationDate <= thirtyDaysFromNow) return 'expiring_soon';
-  return 'active';
+  if (expirationDate < now) return "expired";
+  if (expirationDate <= thirtyDaysFromNow) return "expiring_soon";
+  return "active";
 }
 
-// GET: Get single license details
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    // Find user's org membership
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const license = await db.license.findFirst({
-      where: {
-        id,
-        orgId: orgMember.orgId,
-      },
+      where: { id, orgId: context.orgId },
     });
 
     if (!license) {
-      return NextResponse.json({ error: 'License not found' }, { status: 404 });
+      return NextResponse.json({ error: "License not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      license: {
-        ...license,
-        status: computeLicenseStatus(license.expirationDate),
+    return NextResponse.json(
+      {
+        license: {
+          ...license,
+          status: computeLicenseStatus(license.expirationDate),
+        },
       },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const updateLicenseSchema = z.object({
-  name: z.string().min(1).optional(),
-  type: z.string().min(1).optional(),
-  licenseNumber: z.string().min(1).optional(),
-  issuedBy: z.string().min(1).optional(),
-  state: z.string().nullable().optional(),
-  issueDate: z.string().min(1).optional(),
-  expirationDate: z.string().min(1).optional(),
-  notes: z.string().nullable().optional(),
-  isRenewed: z.boolean().optional(),
-});
+const updateLicenseSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    type: z.string().trim().min(1).max(100).optional(),
+    licenseNumber: z.string().trim().min(1).max(100).optional(),
+    issuedBy: z.string().trim().min(1).max(200).optional(),
+    state: z.string().trim().max(100).nullable().optional(),
+    issueDate: z.coerce.date().optional(),
+    expirationDate: z.coerce.date().optional(),
+    notes: z.string().max(10_000).nullable().optional(),
+    isRenewed: z.boolean().optional(),
+  })
+  .refine(
+    (value) =>
+      !value.issueDate ||
+      !value.expirationDate ||
+      value.expirationDate >= value.issueDate,
+    {
+      message: "Expiration date must be on or after the issue date",
+      path: ["expirationDate"],
+    },
+  );
 
-// PUT: Update license (owner/admin only)
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions. Only owners and admins can update licenses." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    // Find user's org membership and check role
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
+    const existing = await db.license.findFirst({
+      where: { id, orgId: context.orgId },
     });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    if (!existing) {
+      return NextResponse.json({ error: "License not found" }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can update licenses.' },
-        { status: 403 }
-      );
-    }
-
-    // Check license exists and belongs to org
-    const existingLicense = await db.license.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
-    if (!existingLicense) {
-      return NextResponse.json({ error: 'License not found' }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const result = updateLicenseSchema.safeParse(body);
-
+    const result = updateLicenseSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: result.error.issues[0]?.message || "Validation failed" },
+        { status: 400 },
       );
     }
 
-    const updateData: Record<string, unknown> = {};
-    const { issueDate, expirationDate, ...restFields } = result.data;
+    const effectiveIssueDate = result.data.issueDate || existing.issueDate;
+    const effectiveExpirationDate = result.data.expirationDate || existing.expirationDate;
+    if (effectiveExpirationDate < effectiveIssueDate) {
+      return NextResponse.json(
+        { error: "Expiration date must be on or after the issue date" },
+        { status: 400 },
+      );
+    }
 
-    // Sanitize string fields before updating
-    Object.entries(restFields).forEach(([key, value]) => {
-      if (value !== undefined) {
-        // Sanitize string values
-        if (typeof value === 'string') {
-          updateData[key] = sanitizeString(value);
-        } else {
-          updateData[key] = value;
-        }
+    if (result.data.licenseNumber) {
+      const normalizedNumber = sanitizeString(result.data.licenseNumber);
+      const duplicate = await db.license.findFirst({
+        where: {
+          orgId: context.orgId,
+          id: { not: id },
+          licenseNumber: { equals: normalizedNumber, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        return NextResponse.json(
+          { error: "A license with this number already exists in the organization." },
+          { status: 409 },
+        );
       }
-    });
-
-    if (issueDate !== undefined) {
-      updateData.issueDate = new Date(issueDate);
-    }
-    if (expirationDate !== undefined) {
-      updateData.expirationDate = new Date(expirationDate);
     }
 
-    const license = await db.license.update({
-      where: { id },
-      data: updateData,
+    const updateData = {
+      ...(result.data.name !== undefined
+        ? { name: sanitizeString(result.data.name) }
+        : {}),
+      ...(result.data.type !== undefined
+        ? { type: sanitizeString(result.data.type) }
+        : {}),
+      ...(result.data.licenseNumber !== undefined
+        ? { licenseNumber: sanitizeString(result.data.licenseNumber) }
+        : {}),
+      ...(result.data.issuedBy !== undefined
+        ? { issuedBy: sanitizeString(result.data.issuedBy) }
+        : {}),
+      ...(result.data.state !== undefined
+        ? { state: result.data.state ? sanitizeString(result.data.state) : null }
+        : {}),
+      ...(result.data.issueDate !== undefined
+        ? { issueDate: result.data.issueDate }
+        : {}),
+      ...(result.data.expirationDate !== undefined
+        ? { expirationDate: result.data.expirationDate }
+        : {}),
+      ...(result.data.notes !== undefined
+        ? { notes: result.data.notes ? sanitizeString(result.data.notes) : null }
+        : {}),
+      ...(result.data.isRenewed !== undefined
+        ? { isRenewed: result.data.isRenewed }
+        : {}),
+    };
+
+    const license = await db.$transaction(async (transaction) => {
+      const updated = await transaction.license.update({
+        where: { id },
+        data: updateData,
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "update",
+          entityType: "license",
+          entityId: updated.id,
+          entityName: updated.name,
+          details: `Updated license: ${updated.name} (${updated.licenseNumber})`,
+        },
+      });
+      return updated;
     });
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'update',
-        entityType: 'license',
-        entityId: license.id,
-        entityName: license.name,
-        details: `Updated license: ${license.name} (${license.licenseNumber})`,
-      },
-    });
-
-    // Fire webhook event (fire-and-forget)
-    dispatchWebhook(orgMember.orgId, 'license.updated', {
+    dispatchWebhook(context.orgId, "license.updated", {
       id: license.id,
       name: license.name,
       type: license.type,
@@ -173,7 +186,7 @@ export async function PUT(
       issuedBy: license.issuedBy,
       state: license.state,
       expirationDate: license.expirationDate,
-    }).catch(console.error);
+    }).catch((error) => console.error("License webhook delivery failed:", error));
 
     return NextResponse.json({
       license: {
@@ -182,77 +195,59 @@ export async function PUT(
       },
     });
   } catch (error) {
-    console.error('Update license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Update license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// DELETE: Delete license (owner/admin only)
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const { id } = await params;
-
-    // Find user's org membership and check role
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can delete licenses.' },
-        { status: 403 }
+        { error: "Insufficient permissions. Only owners and admins can delete licenses." },
+        { status: 403 },
       );
     }
 
-    // Check license exists and belongs to org
-    const existingLicense = await db.license.findFirst({
-      where: { id, orgId: orgMember.orgId },
+    const { id } = await params;
+    const existing = await db.license.findFirst({
+      where: { id, orgId: context.orgId },
     });
-
-    if (!existingLicense) {
-      return NextResponse.json({ error: 'License not found' }, { status: 404 });
+    if (!existing) {
+      return NextResponse.json({ error: "License not found" }, { status: 404 });
     }
 
-    // Create audit log entry before deletion
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'delete',
-        entityType: 'license',
-        entityId: existingLicense.id,
-        entityName: existingLicense.name,
-        details: `Deleted license: ${existingLicense.name} (${existingLicense.licenseNumber})`,
-      },
+    await db.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "delete",
+          entityType: "license",
+          entityId: existing.id,
+          entityName: existing.name,
+          details: `Deleted license: ${existing.name} (${existing.licenseNumber})`,
+        },
+      });
+      await transaction.license.delete({ where: { id } });
     });
 
-    // Fire webhook event (fire-and-forget)
-    dispatchWebhook(orgMember.orgId, 'license.deleted', {
-      id: existingLicense.id,
-      name: existingLicense.name,
-      licenseNumber: existingLicense.licenseNumber,
-    }).catch(console.error);
-
-    await db.license.delete({
-      where: { id },
-    });
+    dispatchWebhook(context.orgId, "license.deleted", {
+      id: existing.id,
+      name: existing.name,
+      licenseNumber: existing.licenseNumber,
+    }).catch((error) => console.error("License webhook delivery failed:", error));
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Delete license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
