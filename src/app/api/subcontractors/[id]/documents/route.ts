@@ -11,6 +11,8 @@ import {
   refreshSubcontractorProjects,
 } from "@/lib/subcontractor-compliance";
 
+export const runtime = "nodejs";
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const FILE_DEFINITIONS: Record<
@@ -77,6 +79,56 @@ function getSafeOriginalName(fileName: string): string {
   return base.slice(0, 180) || "document";
 }
 
+function getPortalToken(request: Request): string | null {
+  const headerToken = request.headers.get("x-portal-token")?.trim();
+  if (headerToken) return headerToken;
+
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+  try {
+    const url = new URL(referer);
+    const match = url.pathname.match(/\/subcontractor-portal\/([^/]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function authorizeUpload(request: Request, subcontractorId: string) {
+  const context = await getOrgContext();
+  if (context && canManageOrganization(context.role)) {
+    const subcontractor = await db.subcontractor.findFirst({
+      where: { id: subcontractorId, orgId: context.orgId },
+      select: { id: true, companyName: true, orgId: true },
+    });
+    if (subcontractor) {
+      return {
+        subcontractor,
+        userId: context.userId as string | null,
+        source: "team" as const,
+      };
+    }
+  }
+
+  const portalToken = getPortalToken(request);
+  if (!portalToken) return null;
+  const subcontractor = await db.subcontractor.findFirst({
+    where: {
+      id: subcontractorId,
+      portalToken,
+      portalExpiresAt: { gt: new Date() },
+      status: "active",
+    },
+    select: { id: true, companyName: true, orgId: true },
+  });
+  if (!subcontractor) return null;
+  return {
+    subcontractor,
+    userId: null,
+    source: "portal" as const,
+  };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -84,26 +136,12 @@ export async function POST(
   let savedPath: string | null = null;
 
   try {
-    const context = await getOrgContext();
-    if (!context) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!canManageOrganization(context.role)) {
-      return NextResponse.json(
-        { error: "Only organization owners and admins can upload documents." },
-        { status: 403 },
-      );
-    }
-
     const { id } = await params;
-    const subcontractor = await db.subcontractor.findFirst({
-      where: { id, orgId: context.orgId },
-      select: { id: true, companyName: true },
-    });
-    if (!subcontractor) {
+    const authorization = await authorizeUpload(request, id);
+    if (!authorization) {
       return NextResponse.json(
-        { error: "Subcontractor not found" },
-        { status: 404 },
+        { error: "Document upload authorization is invalid or expired." },
+        { status: 401 },
       );
     }
 
@@ -149,8 +187,8 @@ export async function POST(
 
     const relativeDirectory = path.join(
       "subcontractors",
-      context.orgId,
-      subcontractor.id,
+      authorization.subcontractor.orgId,
+      authorization.subcontractor.id,
     );
     const absoluteDirectory = path.join(process.cwd(), "uploads", relativeDirectory);
     await mkdir(absoluteDirectory, { recursive: true });
@@ -163,8 +201,8 @@ export async function POST(
     const document = await db.$transaction(async (transaction) => {
       const created = await transaction.subcontractorDocument.create({
         data: {
-          subcontractorId: subcontractor.id,
-          orgId: context.orgId,
+          subcontractorId: authorization.subcontractor.id,
+          orgId: authorization.subcontractor.orgId,
           fileName: safeOriginalName,
           fileType: extension,
           fileSize: fileValue.size,
@@ -174,33 +212,37 @@ export async function POST(
         },
       });
       await transaction.subcontractor.update({
-        where: { id: subcontractor.id },
+        where: { id: authorization.subcontractor.id },
         data: { lastSubmittedAt: new Date(), complianceStatus: "pending" },
       });
       await transaction.projectSubcontractor.updateMany({
-        where: { subcontractorId: subcontractor.id },
+        where: { subcontractorId: authorization.subcontractor.id },
         data: { complianceStatus: "pending", lastChecked: new Date() },
       });
       await transaction.auditLog.create({
         data: {
-          orgId: context.orgId,
-          userId: context.userId,
+          orgId: authorization.subcontractor.orgId,
+          userId: authorization.userId,
           action: "document_uploaded",
           entityType: "subcontractor_document",
           entityId: created.id,
           entityName: safeOriginalName,
           details: JSON.stringify({
-            subcontractorId: subcontractor.id,
-            companyName: subcontractor.companyName,
+            subcontractorId: authorization.subcontractor.id,
+            companyName: authorization.subcontractor.companyName,
             category: created.category,
             fileSize: created.fileSize,
+            source: authorization.source,
           }),
         },
       });
       return created;
     });
 
-    await refreshSubcontractorProjects(subcontractor.id, context.orgId);
+    await refreshSubcontractorProjects(
+      authorization.subcontractor.id,
+      authorization.subcontractor.orgId,
+    );
     return NextResponse.json(
       {
         document: {
