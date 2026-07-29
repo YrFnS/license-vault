@@ -1,177 +1,164 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateOrgComplianceReport } from "@/lib/pdf-report";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+
+function getStatus(expirationDate: Date, now: Date): string {
+  const daysRemaining = Math.ceil(
+    (expirationDate.getTime() - now.getTime()) / 86_400_000,
+  );
+  if (daysRemaining < 0) return "expired";
+  if (daysRemaining <= 60) return "expiring_soon";
+  return "active";
+}
+
+function safeFileName(value: string): string {
+  return (
+    value
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80)
+      .toLowerCase() || "organization"
+  );
+}
 
 export async function GET() {
-	try {
-		const session = await getServerSession(authOptions);
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
+  try {
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can export this report." },
+        { status: 403 },
+      );
+    }
 
-		const userId = (session.user as any).id;
-		const userRole = (session.user as any).role;
+    const [organization, licenses, insurance, ceRecords, teamMembers] =
+      await Promise.all([
+        db.organization.findUnique({
+          where: { id: context.orgId },
+          select: {
+            id: true,
+            name: true,
+            companyName: true,
+            tradeType: true,
+            primaryState: true,
+          },
+        }),
+        db.license.findMany({
+          where: { orgId: context.orgId },
+          orderBy: { expirationDate: "asc" },
+        }),
+        db.insuranceBond.findMany({
+          where: { orgId: context.orgId },
+          orderBy: { expirationDate: "asc" },
+        }),
+        db.cETracking.findMany({
+          where: { orgId: context.orgId },
+          orderBy: { completionDate: "desc" },
+        }),
+        db.orgMember.findMany({
+          where: { orgId: context.orgId, joinedAt: { not: null } },
+          orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        }),
+      ]);
 
-		// Check org membership - owner/admin only
-		const orgMember = await db.orgMember.findFirst({
-			where: { userId },
-		});
+    if (!organization) {
+      return NextResponse.json(
+        { error: "Organization not found" },
+        { status: 404 },
+      );
+    }
 
-		if (!orgMember) {
-			return NextResponse.json(
-				{ error: "No organization found" },
-				{ status: 404 },
-			);
-		}
+    const now = new Date();
+    const licensesWithStatus = licenses.map((license) => ({
+      ...license,
+      status: getStatus(license.expirationDate, now),
+    }));
+    const insuranceWithStatus = insurance.map((record) => ({
+      ...record,
+      status: getStatus(record.expirationDate, now),
+    }));
 
-		if (userRole !== "owner" && userRole !== "admin") {
-			return NextResponse.json(
-				{ error: "Access denied. Owner or Admin role required." },
-				{ status: 403 },
-			);
-		}
+    const totalItems = licensesWithStatus.length + insuranceWithStatus.length;
+    const currentItems =
+      licensesWithStatus.filter((item) => item.status !== "expired").length +
+      insuranceWithStatus.filter((item) => item.status !== "expired").length;
+    const complianceScore =
+      totalItems > 0 ? Math.round((currentItems / totalItems) * 100) : 100;
+    const organizationName = organization.companyName || organization.name;
 
-		const orgId = orgMember.orgId;
+    const pdfBuffer = generateOrgComplianceReport({
+      org: {
+        name: organizationName,
+        tradeType: organization.tradeType,
+        primaryState: organization.primaryState,
+      },
+      licenses: licensesWithStatus.map((license) => ({
+        id: license.id,
+        name: license.name,
+        type: license.type,
+        licenseNumber: license.licenseNumber,
+        issuedBy: license.issuedBy,
+        expirationDate: license.expirationDate,
+        status: license.status,
+      })),
+      insurance: insuranceWithStatus.map((record) => ({
+        name: record.name,
+        type: record.type,
+        provider: record.provider,
+        expirationDate: record.expirationDate,
+        status: record.status,
+      })),
+      ceRecords: ceRecords.map((record) => ({
+        courseName: record.courseName,
+        hoursEarned: record.hoursEarned,
+        hoursRequired: record.hoursRequired,
+      })),
+      users: teamMembers.map((member) => ({
+        name: member.user?.name || member.fullName || member.email,
+        email: member.user?.email || member.email,
+        role: member.role,
+      })),
+      complianceScore,
+    });
 
-		// Get organization
-		const org = await db.organization.findUnique({
-			where: { id: orgId },
-		});
+    await db.auditLog.create({
+      data: {
+        orgId: context.orgId,
+        userId: context.userId,
+        action: "generate_report",
+        entityType: "organization",
+        entityId: context.orgId,
+        entityName: organizationName,
+        details: JSON.stringify({
+          format: "pdf",
+          reportType: "organization_compliance",
+          licenseCount: licenses.length,
+          insuranceCount: insurance.length,
+        }),
+      },
+    });
 
-		if (!org) {
-			return NextResponse.json(
-				{ error: "Organization not found" },
-				{ status: 404 },
-			);
-		}
-
-		// Get all licenses
-		const licenses = await db.license.findMany({
-			where: { orgId },
-			orderBy: { expirationDate: "asc" },
-		});
-
-		// Compute status for each license
-		const now = new Date();
-		const licensesWithStatus = licenses.map((l) => {
-			const exp = new Date(l.expirationDate);
-			const daysUntil = Math.ceil(
-				(exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-			);
-			const status =
-				daysUntil < 0
-					? "expired"
-					: daysUntil <= 60
-						? "expiring_soon"
-						: "active";
-			return { ...l, status };
-		});
-
-		// Get all insurance/bonds
-		const insurance = await db.insuranceBond.findMany({
-			where: { orgId },
-			orderBy: { expirationDate: "asc" },
-		});
-
-		const insuranceWithStatus = insurance.map((i) => {
-			const exp = new Date(i.expirationDate);
-			const daysUntil = Math.ceil(
-				(exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-			);
-			const status =
-				daysUntil < 0
-					? "expired"
-					: daysUntil <= 60
-						? "expiring_soon"
-						: "active";
-			return { ...i, status };
-		});
-
-		// Get all CE records
-		const ceRecords = await db.cETracking.findMany({
-			where: { orgId },
-		});
-
-		// Get team members
-		const teamMembers = await db.orgMember.findMany({
-			where: { orgId },
-			include: {
-				user: {
-					select: { name: true, email: true },
-				},
-			},
-		});
-
-		// Calculate compliance score
-		const totalItems = licensesWithStatus.length + insuranceWithStatus.length;
-		const activeItems =
-			licensesWithStatus.filter((l) => l.status === "active").length +
-			insuranceWithStatus.filter((i) => i.status === "active").length;
-		const complianceScore =
-			totalItems > 0 ? Math.round((activeItems / totalItems) * 100) : 100;
-
-		// Generate PDF
-		const pdfBuffer = generateOrgComplianceReport({
-			org: {
-				name: org.name,
-				tradeType: org.tradeType,
-				primaryState: org.primaryState,
-			},
-			licenses: licensesWithStatus.map((l) => ({
-				id: l.id,
-				name: l.name,
-				type: l.type,
-				licenseNumber: l.licenseNumber,
-				issuedBy: l.issuedBy,
-				expirationDate: l.expirationDate,
-				status: l.status,
-			})),
-			insurance: insuranceWithStatus.map((i) => ({
-				name: i.name,
-				type: i.type,
-				provider: i.provider,
-				expirationDate: i.expirationDate,
-				status: i.status,
-			})),
-			ceRecords: ceRecords.map((ce) => ({
-				courseName: ce.courseName,
-				hoursEarned: ce.hoursEarned,
-				hoursRequired: ce.hoursRequired,
-			})),
-			users: teamMembers.map((m) => ({
-				name: m.user?.name || m.fullName || m.email,
-				email: m.email,
-				role: m.role,
-			})),
-			complianceScore,
-		});
-
-		// Audit log the report generation
-		await db.auditLog.create({
-			data: {
-				orgId,
-				userId,
-				action: "generate_report",
-				entityType: "organization",
-				entityId: orgId,
-				entityName: org.name,
-				details: "Generated organization compliance PDF report",
-			},
-		});
-
-		return new NextResponse(pdfBuffer as BodyInit, {
-			headers: {
-				"Content-Type": "application/pdf",
-				"Content-Disposition": `attachment; filename="org-compliance-report-${org.name.replace(/\s+/g, "-").toLowerCase()}.pdf"`,
-			},
-		});
-	} catch (error) {
-		console.error("Org report generation error:", error);
-		return NextResponse.json(
-			{ error: "Failed to generate organization report" },
-			{ status: 500 },
-		);
-	}
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="org-compliance-report-${safeFileName(organizationName)}.pdf"`,
+        "Cache-Control": "private, no-store, max-age=0",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("Org report generation error:", error);
+    return NextResponse.json(
+      { error: "Failed to generate organization report" },
+      { status: 500 },
+    );
+  }
 }
