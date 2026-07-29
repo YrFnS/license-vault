@@ -2,8 +2,25 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+interface SubmissionTemplate {
+  state: string;
+  submissionType: string;
+  boardName: string;
+  boardEmail: string;
+  boardPortalUrl: string;
+  filingFee: number;
+  estimatedDays: number;
+  fields: Array<{
+    name: string;
+    label: string;
+    value: string;
+    required: boolean;
+  }>;
+  requiredDocs: string[];
+}
+
 // Hardcoded templates for common states
-const templates: Record<string, any[]> = {
+const templates: Record<string, SubmissionTemplate[]> = {
   CA: [
     {
       state: 'CA',
@@ -184,21 +201,21 @@ export async function GET(request: Request) {
     const state = searchParams.get('state')?.toUpperCase();
     const submissionType = searchParams.get('submissionType');
 
-    let result = templates;
-
     if (state) {
       const stateTemplates = templates[state] || [];
       if (submissionType) {
-        const filtered = stateTemplates.filter((t: any) => t.submissionType === submissionType);
+        const filtered = stateTemplates.filter(
+          (template) => template.submissionType === submissionType,
+        );
         return NextResponse.json({ templates: filtered });
       }
       return NextResponse.json({ templates: stateTemplates });
     }
 
     // Return all available states
-    const availableStates = Object.keys(templates).map((s) => ({
-      state: s,
-      types: templates[s].map((t: any) => t.submissionType),
+    const availableStates = Object.keys(templates).map((stateCode) => ({
+      state: stateCode,
+      types: templates[stateCode].map((template) => template.submissionType),
     }));
 
     return NextResponse.json({ availableStates, templates: [] });
