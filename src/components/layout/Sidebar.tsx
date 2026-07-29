@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import {
@@ -154,16 +154,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     () => new Set(["workspace", "complianceCenter"]),
   );
 
-  useEffect(() => {
-    if (!activeSectionKey) return;
-    setOpenSections((previous) => {
-      if (previous.has(activeSectionKey)) return previous;
-      const next = new Set(previous);
-      next.add(activeSectionKey);
-      return next;
-    });
-  }, [activeSectionKey]);
-
   const handleLogout = async () => {
     await clearClientSessionData();
     await signOut({ redirect: false });
@@ -186,7 +176,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col bg-white dark:bg-slate-950">
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 px-4 dark:border-slate-800">
         <Avatar className="size-9 rounded-xl">
-          <AvatarImage src={branding.logoUrl} alt={branding.displayName} className="object-cover" />
+          {branding.logoUrl && (
+            <AvatarImage src={branding.logoUrl} alt={branding.displayName} className="object-cover" />
+          )}
           <AvatarFallback
             className="rounded-xl text-white"
             style={{ backgroundColor: "var(--brand-primary)" }}
@@ -214,7 +206,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <nav className="flex flex-col gap-1 px-2 py-3" aria-label="Primary navigation">
           {visibleSections.map((section) => {
             const sectionName = t(section.labelKey);
-            const expanded = openSections.has(section.labelKey);
+            const expanded =
+              openSections.has(section.labelKey) ||
+              activeSectionKey === section.labelKey;
 
             return (
               <div key={section.labelKey} className="mb-1">
