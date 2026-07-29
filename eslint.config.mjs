@@ -28,6 +28,14 @@ const eslintConfig = [
     },
   },
   {
+    files: ["src/scripts/seed-state-requirements.ts"],
+    rules: {
+      // This generated one-off seed file keeps counters for readable CLI output.
+      // Treat style-only const suggestions as warnings while preserving safety errors.
+      "prefer-const": "warn",
+    },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",
