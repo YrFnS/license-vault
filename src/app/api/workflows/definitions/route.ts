@@ -1,183 +1,317 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  parseWorkflowSteps,
+  safeParseStoredObject,
+  safeParseStoredWorkflowSteps,
+  workflowCategorySchema,
+  type WorkflowStep,
+} from "@/lib/workflow-engine";
 
-// GET: List workflow definitions with category filtering and instance counts
-export async function GET(request: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category') || undefined;
-    const includeInactive = searchParams.get('includeInactive') === 'true';
-
-    const where: any = { orgId: orgMember.orgId };
-    if (!includeInactive) where.isActive = true;
-    if (category) where.category = category;
-
-    const definitions = await db.workflowDefinition.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        _count: { select: { instances: true } },
-      },
-    });
-
-    // Count active instances for each definition
-    const enriched = await Promise.all(
-      definitions.map(async (def) => {
-        const activeInstances = await db.workflowInstance.count({
-          where: { definitionId: def.id, status: 'active' },
-        });
-        const completedInstances = await db.workflowInstance.count({
-          where: { definitionId: def.id, status: 'completed' },
-        });
-        return {
-          ...def,
-          steps: JSON.parse(def.steps),
-          _count: {
-            instances: def._count.instances,
-            activeInstances,
-            completedInstances,
-          },
-        };
-      })
-    );
-
-    // Stats
-    const [total, active, runningInstances, completed] = await Promise.all([
-      db.workflowDefinition.count({ where: { orgId: orgMember.orgId } }),
-      db.workflowDefinition.count({ where: { orgId: orgMember.orgId, isActive: true } }),
-      db.workflowInstance.count({ where: { orgId: orgMember.orgId, status: 'active' } }),
-      db.workflowInstance.count({ where: { orgId: orgMember.orgId, status: 'completed' } }),
-    ]);
-
-    return NextResponse.json({
-      definitions: enriched,
-      stats: { total, active, runningInstances, completed },
-    });
-  } catch (error) {
-    console.error('Get workflow definitions error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-const templateSteps: Record<string, Array<{ id: string; name: string; type: string; assignee: string; actions: string[]; conditions: string[]; order: number }>> = {
+const templateSteps: Record<string, WorkflowStep[]> = {
   license_renewal: [
-    { id: 'step_1', name: 'Initiate Renewal', type: 'action', assignee: 'owner', actions: ['start_renewal'], conditions: [], order: 0 },
-    { id: 'step_2', name: 'Review Requirements', type: 'review', assignee: 'admin', actions: ['check_requirements'], conditions: [], order: 1 },
-    { id: 'step_3', name: 'Complete Continuing Education', type: 'action', assignee: 'member', actions: ['complete_ce'], conditions: [], order: 2 },
-    { id: 'step_4', name: 'Submit Renewal Application', type: 'approval', assignee: 'admin', actions: ['submit_application'], conditions: ['ce_complete'], order: 3 },
-    { id: 'step_5', name: 'Verify New License', type: 'review', assignee: 'owner', actions: ['verify_license'], conditions: [], order: 4 },
+    {
+      id: "step_1",
+      name: "Initiate Renewal",
+      type: "action",
+      assignee: "owner",
+      actions: ["start_renewal"],
+      conditions: [],
+      order: 0,
+    },
+    {
+      id: "step_2",
+      name: "Review Requirements",
+      type: "review",
+      assignee: "admin",
+      actions: ["check_requirements"],
+      conditions: [],
+      order: 1,
+    },
+    {
+      id: "step_3",
+      name: "Complete Continuing Education",
+      type: "action",
+      assignee: "member",
+      actions: ["complete_ce"],
+      conditions: [],
+      order: 2,
+    },
+    {
+      id: "step_4",
+      name: "Submit Renewal Application",
+      type: "approval",
+      assignee: "admin",
+      actions: ["submit_application"],
+      conditions: ["ce_complete"],
+      order: 3,
+    },
+    {
+      id: "step_5",
+      name: "Verify New License",
+      type: "review",
+      assignee: "owner",
+      actions: ["verify_license"],
+      conditions: [],
+      order: 4,
+    },
   ],
   onboarding: [
-    { id: 'step_1', name: 'Submit Credentials', type: 'action', assignee: 'member', actions: ['upload_credentials'], conditions: [], order: 0 },
-    { id: 'step_2', name: 'Admin Review', type: 'approval', assignee: 'admin', actions: ['review_credentials'], conditions: [], order: 1 },
-    { id: 'step_3', name: 'Upload Documents', type: 'action', assignee: 'member', actions: ['upload_documents'], conditions: ['credentials_approved'], order: 2 },
-    { id: 'step_4', name: 'Compliance Check', type: 'review', assignee: 'owner', actions: ['verify_compliance'], conditions: [], order: 3 },
+    {
+      id: "step_1",
+      name: "Submit Credentials",
+      type: "action",
+      assignee: "member",
+      actions: ["upload_credentials"],
+      conditions: [],
+      order: 0,
+    },
+    {
+      id: "step_2",
+      name: "Admin Review",
+      type: "approval",
+      assignee: "admin",
+      actions: ["review_credentials"],
+      conditions: [],
+      order: 1,
+    },
+    {
+      id: "step_3",
+      name: "Upload Documents",
+      type: "action",
+      assignee: "member",
+      actions: ["upload_documents"],
+      conditions: ["credentials_approved"],
+      order: 2,
+    },
+    {
+      id: "step_4",
+      name: "Compliance Check",
+      type: "review",
+      assignee: "owner",
+      actions: ["verify_compliance"],
+      conditions: [],
+      order: 3,
+    },
   ],
   audit: [
-    { id: 'step_1', name: 'Schedule Audit', type: 'action', assignee: 'admin', actions: ['schedule_audit'], conditions: [], order: 0 },
-    { id: 'step_2', name: 'Conduct Review', type: 'review', assignee: 'admin', actions: ['conduct_review'], conditions: [], order: 1 },
-    { id: 'step_3', name: 'Generate Report', type: 'action', assignee: 'owner', actions: ['generate_report'], conditions: [], order: 2 },
+    {
+      id: "step_1",
+      name: "Schedule Audit",
+      type: "action",
+      assignee: "admin",
+      actions: ["schedule_audit"],
+      conditions: [],
+      order: 0,
+    },
+    {
+      id: "step_2",
+      name: "Conduct Review",
+      type: "review",
+      assignee: "admin",
+      actions: ["conduct_review"],
+      conditions: [],
+      order: 1,
+    },
+    {
+      id: "step_3",
+      name: "Generate Report",
+      type: "action",
+      assignee: "owner",
+      actions: ["generate_report"],
+      conditions: [],
+      order: 2,
+    },
   ],
 };
 
 const createDefinitionSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-  category: z.enum(['license_renewal', 'onboarding', 'audit', 'document_review', 'custom']).default('custom'),
-  triggerType: z.enum(['manual', 'automatic', 'scheduled', 'event']).default('manual'),
-  triggerConfig: z.string().optional(),
-  steps: z.string().optional(),
-  template: z.enum(['license_renewal', 'onboarding', 'audit']).optional(),
+  name: z.string().trim().min(1, "Name is required").max(200),
+  description: z.string().trim().max(5_000).optional(),
+  category: workflowCategorySchema.default("custom"),
+  triggerType: z
+    .enum(["manual", "automatic", "scheduled", "event"])
+    .default("manual"),
+  triggerConfig: z.union([z.string().max(20_000), z.record(z.string(), z.unknown())]).optional(),
+  steps: z.unknown().optional(),
+  template: z.enum(["license_renewal", "onboarding", "audit"]).optional(),
 });
 
-// POST: Create workflow definition (supports templates)
+function serializeDefinition<
+  T extends {
+    steps: string;
+    triggerConfig: string | null;
+    triggerType: string;
+  },
+>(definition: T) {
+  return {
+    ...definition,
+    steps: safeParseStoredWorkflowSteps(definition.steps),
+    triggerConfig: safeParseStoredObject(definition.triggerConfig),
+    executable: definition.triggerType === "manual",
+  };
+}
+
+export async function GET(request: Request) {
+  try {
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const categoryResult = workflowCategorySchema.safeParse(
+      searchParams.get("category") || undefined,
+    );
+    const includeInactive = searchParams.get("includeInactive") === "true";
+
+    const where: Prisma.WorkflowDefinitionWhereInput = {
+      orgId: context.orgId,
+      ...(!includeInactive ? { isActive: true } : {}),
+      ...(categoryResult.success && categoryResult.data
+        ? { category: categoryResult.data }
+        : {}),
+    };
+
+    const [definitions, groupedInstances, total, active, runningInstances, completed] =
+      await Promise.all([
+        db.workflowDefinition.findMany({
+          where,
+          orderBy: { updatedAt: "desc" },
+          include: { _count: { select: { instances: true } } },
+        }),
+        db.workflowInstance.groupBy({
+          by: ["definitionId", "status"],
+          where: { orgId: context.orgId },
+          _count: { _all: true },
+        }),
+        db.workflowDefinition.count({ where: { orgId: context.orgId } }),
+        db.workflowDefinition.count({
+          where: { orgId: context.orgId, isActive: true },
+        }),
+        db.workflowInstance.count({
+          where: { orgId: context.orgId, status: "active" },
+        }),
+        db.workflowInstance.count({
+          where: { orgId: context.orgId, status: "completed" },
+        }),
+      ]);
+
+    const instanceCountMap = new Map<string, Map<string, number>>();
+    for (const group of groupedInstances) {
+      const statuses = instanceCountMap.get(group.definitionId) || new Map();
+      statuses.set(group.status, group._count._all);
+      instanceCountMap.set(group.definitionId, statuses);
+    }
+
+    return NextResponse.json(
+      {
+        definitions: definitions.map((definition) => {
+          const statuses = instanceCountMap.get(definition.id);
+          return {
+            ...serializeDefinition(definition),
+            _count: {
+              instances: definition._count.instances,
+              activeInstances: statuses?.get("active") || 0,
+              completedInstances: statuses?.get("completed") || 0,
+            },
+          };
+        }),
+        stats: { total, active, runningInstances, completed },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("Get workflow definitions error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    // Only admins/owners can create workflows
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const result = createDefinitionSchema.safeParse(body);
-
-    if (!result.success) {
-      const firstError = result.error.issues?.[0];
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: "Only organization owners and admins can create workflows." },
+        { status: 403 },
       );
     }
 
-    const { name, description, category, triggerType, triggerConfig, steps, template } = result.data;
-
-    // Determine steps: from template, from provided steps, or empty
-    let stepsData: Array<{ id: string; name: string; type: string; assignee: string; actions: string[]; conditions: string[]; order: number }> = [];
-    if (template && templateSteps[template]) {
-      stepsData = templateSteps[template];
-    } else if (steps) {
-      try {
-        stepsData = JSON.parse(steps);
-      } catch {
-        return NextResponse.json({ error: 'Invalid steps JSON' }, { status: 400 });
-      }
+    const result = createDefinitionSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
+    if (result.data.triggerType !== "manual") {
+      return NextResponse.json(
+        {
+          error:
+            "Automatic, scheduled, and event workflow triggers are not available yet. Create a manual workflow instead.",
+          code: "WORKFLOW_TRIGGER_NOT_IMPLEMENTED",
+        },
+        { status: 422 },
+      );
     }
 
-    const definition = await db.workflowDefinition.create({
-      data: {
-        orgId: orgMember.orgId,
-        name,
-        description: description || null,
-        category,
-        triggerType,
-        triggerConfig: triggerConfig || null,
-        steps: JSON.stringify(stepsData),
-      },
+    let steps: WorkflowStep[];
+    try {
+      steps = result.data.template
+        ? parseWorkflowSteps(templateSteps[result.data.template])
+        : parseWorkflowSteps(result.data.steps);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Invalid workflow steps" },
+        { status: 400 },
+      );
+    }
+
+    const definition = await db.$transaction(async (transaction) => {
+      const created = await transaction.workflowDefinition.create({
+        data: {
+          orgId: context.orgId,
+          name: sanitizeString(result.data.name),
+          description: result.data.description
+            ? sanitizeString(result.data.description)
+            : null,
+          category: result.data.category,
+          triggerType: "manual",
+          triggerConfig: null,
+          steps: JSON.stringify(steps),
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "create",
+          entityType: "workflow_definition",
+          entityId: created.id,
+          entityName: created.name,
+          details: JSON.stringify({
+            category: created.category,
+            triggerType: created.triggerType,
+            stepCount: steps.length,
+          }),
+        },
+      });
+      return created;
     });
 
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'create',
-        entityType: 'workflow_definition',
-        entityId: definition.id,
-        entityName: definition.name,
-        details: `Created workflow definition: ${definition.name} (${category})`,
-      },
-    });
-
-    return NextResponse.json({
-      ...definition,
-      steps: stepsData,
-    }, { status: 201 });
+    return NextResponse.json(serializeDefinition(definition), { status: 201 });
   } catch (error) {
-    console.error('Create workflow definition error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Create workflow definition error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
