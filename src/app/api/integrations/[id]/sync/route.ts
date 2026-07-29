@@ -1,124 +1,151 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  decryptIntegrationConfig,
+  hasAutomaticSyncAdapter,
+  testIntegrationConnection,
+} from "@/lib/integration-config";
 
-// POST: Trigger manual sync (simulated)
+export const runtime = "nodejs";
+
 export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can run integrations." },
+        { status: 403 },
+      );
     }
 
     const { id } = await params;
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const integration = await db.integration.findFirst({
-      where: { id, orgId: orgMember.orgId, isActive: true },
+      where: { id, orgId: context.orgId, isActive: true },
     });
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Integration not found" },
+        { status: 404 },
+      );
     }
 
-    // Set status to syncing
-    await db.integration.update({
-      where: { id },
-      data: { status: 'syncing' },
-    });
-
-    // Create sync log entry (running)
-    const syncLog = await db.integrationSyncLog.create({
-      data: {
-        integrationId: id,
-        orgId: orgMember.orgId,
-        type: 'manual',
-        status: 'running',
-        recordsSynced: 0,
-      },
-    });
-
-    // Simulate sync by completing it after a brief delay
-    // In production, this would be a background job
-    const recordsSynced = Math.floor(Math.random() * 50) + 10;
-    const hasError = Math.random() < 0.15; // 15% chance of simulated error
-
-    if (hasError) {
-      // Simulate a failed sync
-      await db.integrationSyncLog.update({
-        where: { id: syncLog.id },
-        data: {
-          status: 'failed',
-          recordsSynced: 0,
-          errors: JSON.stringify(['Connection timeout', 'API rate limit exceeded']),
-          completedAt: new Date(),
+    const config = decryptIntegrationConfig(integration.config);
+    if (!config) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INTEGRATION_RECONNECT_REQUIRED",
+          message: "Reconnect this integration with a valid API endpoint and credential.",
         },
+        { status: 409 },
+      );
+    }
+
+    const connection = await testIntegrationConnection(config);
+    if (!connection.success) {
+      await db.$transaction(async (transaction) => {
+        await transaction.integration.update({
+          where: { id: integration.id },
+          data: {
+            status: "error",
+            lastSyncStatus: "connection_failed",
+            lastError: connection.message,
+            errorCount: { increment: 1 },
+          },
+        });
+        await transaction.integrationSyncLog.create({
+          data: {
+            integrationId: integration.id,
+            orgId: context.orgId,
+            type: "manual",
+            status: "failed",
+            recordsSynced: 0,
+            errors: JSON.stringify([connection.message]),
+            completedAt: new Date(),
+          },
+        });
       });
 
-      await db.integration.update({
-        where: { id },
-        data: {
-          status: 'error',
-          errorCount: integration.errorCount + 1,
-          lastError: 'Connection timeout',
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INTEGRATION_CONNECTION_FAILED",
+          message: connection.message,
         },
+        { status: 502 },
+      );
+    }
+
+    if (!hasAutomaticSyncAdapter(integration.type)) {
+      const message =
+        "Connection verified, but an automatic data-sync adapter is not available for this provider yet.";
+      await db.$transaction(async (transaction) => {
+        await transaction.integration.update({
+          where: { id: integration.id },
+          data: {
+            status: "connected",
+            lastSyncStatus: "unsupported",
+            lastError: message,
+          },
+        });
+        await transaction.integrationSyncLog.create({
+          data: {
+            integrationId: integration.id,
+            orgId: context.orgId,
+            type: "manual",
+            status: "unsupported",
+            recordsSynced: 0,
+            errors: JSON.stringify([message]),
+            completedAt: new Date(),
+          },
+        });
+        await transaction.auditLog.create({
+          data: {
+            orgId: context.orgId,
+            userId: context.userId,
+            action: "integration_connection_verified",
+            entityType: "integration",
+            entityId: integration.id,
+            entityName: integration.name,
+            details: JSON.stringify({
+              type: integration.type,
+              endpoint: config.baseUrl,
+              latencyMs: connection.latencyMs,
+              automaticSyncAvailable: false,
+            }),
+          },
+        });
       });
 
-      return NextResponse.json({
+      return NextResponse.json(
+        {
+          success: false,
+          status: "unsupported",
+          code: "SYNC_ADAPTER_NOT_AVAILABLE",
+          message,
+          connection,
+        },
+        { status: 501 },
+      );
+    }
+
+    return NextResponse.json(
+      {
         success: false,
-        status: 'failed',
-        message: 'Sync failed: Connection timeout',
-      });
-    }
-
-    // Simulate successful sync
-    await db.integrationSyncLog.update({
-      where: { id: syncLog.id },
-      data: {
-        status: 'completed',
-        recordsSynced,
-        completedAt: new Date(),
+        code: "SYNC_ADAPTER_NOT_AVAILABLE",
+        message: "No sync adapter is registered for this integration.",
       },
-    });
-
-    await db.integration.update({
-      where: { id },
-      data: {
-        status: 'connected',
-        lastSyncAt: new Date(),
-        lastSyncStatus: 'success',
-        syncCount: integration.syncCount + 1,
-      },
-    });
-
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'integration_sync',
-        entityType: 'integration',
-        entityId: integration.id,
-        entityName: integration.name,
-        details: `Manual sync completed for ${integration.name}: ${recordsSynced} records`,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      status: 'completed',
-      recordsSynced,
-      message: `Sync completed: ${recordsSynced} records synced`,
-    });
+      { status: 501 },
+    );
   } catch (error) {
-    console.error('Error triggering sync:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error triggering sync:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
