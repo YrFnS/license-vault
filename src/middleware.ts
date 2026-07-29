@@ -1,6 +1,7 @@
 import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { routing } from "./i18n/routing";
+import { checkDistributedRateLimit } from "./lib/distributed-rate-limit";
 
 const intlMiddleware = createMiddleware(routing);
 
@@ -15,37 +16,6 @@ function getAiDomain(): string {
 }
 
 const AI_DOMAIN = getAiDomain();
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(
-  key: string,
-  maxRequests: number,
-  windowMs: number,
-): { allowed: boolean; remaining: number; resetIn: number } {
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true, remaining: maxRequests - 1, resetIn: windowMs };
-  }
-
-  entry.count += 1;
-  if (rateLimitStore.size > 5_000) {
-    for (const [storedKey, storedEntry] of rateLimitStore.entries()) {
-      if (now > storedEntry.resetAt) rateLimitStore.delete(storedKey);
-    }
-  }
-
-  const remaining = Math.max(0, maxRequests - entry.count);
-  const resetIn = Math.max(0, entry.resetAt - now);
-  return {
-    allowed: entry.count <= maxRequests,
-    remaining,
-    resetIn,
-  };
-}
-
 const AUTH_LIMIT = { max: 10, window: 15 * 60 * 1000 };
 const PUBLIC_API_LIMIT = { max: 60, window: 60 * 1000 };
 const GENERAL_API_LIMIT = { max: 120, window: 60 * 1000 };
@@ -99,7 +69,7 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export default function middleware(request: NextRequest) {
+export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/api/")) {
@@ -114,23 +84,29 @@ export default function middleware(request: NextRequest) {
       : pathname.startsWith("/api/v1/")
         ? "public"
         : "api";
-    const limitResult = checkRateLimit(`${prefix}:${ip}`, limit.max, limit.window);
+    const limitResult = await checkDistributedRateLimit(
+      `${prefix}:${ip}`,
+      limit.max,
+      limit.window,
+    );
 
     if (!limitResult.allowed) {
-      return applySecurityHeaders(
-        new NextResponse(
-          JSON.stringify({ error: "Too many requests. Please try again later." }),
+      const response = applySecurityHeaders(
+        NextResponse.json(
+          { error: "Too many requests. Please try again later." },
           {
             status: 429,
             headers: {
-              "Content-Type": "application/json",
               "Retry-After": String(Math.ceil(limitResult.resetIn / 1000)),
               "X-RateLimit-Remaining": "0",
               "X-RateLimit-Reset": String(Date.now() + limitResult.resetIn),
+              "X-RateLimit-Source": limitResult.source,
             },
           },
         ),
       );
+      response.headers.set("Cache-Control", "no-store");
+      return response;
     }
 
     const isMutation = ["POST", "PUT", "DELETE", "PATCH"].includes(request.method);
@@ -162,6 +138,7 @@ export default function middleware(request: NextRequest) {
     const response = applySecurityHeaders(NextResponse.next());
     response.headers.set("X-RateLimit-Remaining", String(limitResult.remaining));
     response.headers.set("X-RateLimit-Reset", String(Date.now() + limitResult.resetIn));
+    response.headers.set("X-RateLimit-Source", limitResult.source);
     response.headers.set("Cache-Control", "no-store");
     response.headers.append("Vary", "Authorization");
     response.headers.append("Vary", "Cookie");
