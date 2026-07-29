@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   HardHat,
   Layers,
@@ -7,7 +7,7 @@ import {
   DollarSign,
   Users,
   Puzzle,
-} from 'lucide-react';
+} from "lucide-react";
 
 export interface IntegrationData {
   id: string;
@@ -26,6 +26,7 @@ export interface IntegrationData {
   createdAt: string;
   updatedAt: string;
   syncLogs: SyncLogData[];
+  syncAvailable: boolean;
 }
 
 export interface SyncLogData {
@@ -56,14 +57,22 @@ export interface CatalogIntegration {
   icon: string;
   description: string;
   dataFlows: string[];
+  connectionAvailable: boolean;
+  syncAvailable: boolean;
+  availability: "connection_only" | "sync_available";
 }
 
 export interface TestConnectionResult {
   success: boolean;
   message: string;
+  status?: number;
+  latencyMs?: number;
 }
 
-export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+export const ICON_MAP: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
   HardHat,
   Layers,
   Building,
@@ -73,9 +82,7 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Puzzle,
 };
 
-const FADE_IN = {
+export const fadeIn = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
 };
-
-export const fadeIn = FADE_IN;
