@@ -1,4 +1,9 @@
 {
+  "workspace": "Workspace",
+  "complianceCenter": "Compliance",
+  "operations": "Operations",
+  "insights": "Insights",
+  "administration": "Administration",
   "dashboard": "Dashboard",
   "licenses": "Licenses",
   "aiChat": "AI Assistant",
@@ -34,11 +39,15 @@
   "businessEntities": "Business Entities",
   "regulatoryAlerts": "Regulatory Alerts",
   "documentGenerator": "Document Generator",
+  "documents": "Documents",
   "integrations": "Integrations",
   "signatures": "E-Signatures",
   "contractorNetwork": "Contractor Network",
   "vendorScores": "Vendor Scores",
   "branding": "Branding",
   "boardSubmissions": "Board Submissions",
-  "compliance": "Compliance"
+  "compliance": "Compliance Overview",
+  "openNavigation": "Open navigation",
+  "collapseSection": "Collapse {section}",
+  "expandSection": "Expand {section}"
 }
