@@ -1,148 +1,149 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useSession } from "next-auth/react";
+import { AnimatePresence } from "framer-motion";
+import { FileText, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
+import { Link, useRouter } from "@/i18n/navigation";
+import { AlertBanner } from "@/components/dashboard/AlertBanner";
 import {
-  Plus, FileText, RefreshCw, ShieldCheck, ShieldAlert,
-} from 'lucide-react';
-import { Link, useRouter } from '@/i18n/navigation';
-import { toast } from 'sonner';
-import { useSession } from 'next-auth/react';
-import { AnimatePresence } from 'framer-motion';
-import { SummaryCards } from '@/components/dashboard/SummaryCards';
-import { AlertBanner } from '@/components/dashboard/AlertBanner';
-import { ProactiveAlerts } from '@/components/dashboard/ProactiveAlerts';
-import { ExpirationCheckWidget } from '@/components/dashboard/ExpirationCheckWidget';
-import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
-import { ActivityTimeline, ActivityTimelineSkeleton, type ActivityEntry } from '@/components/dashboard/ActivityTimeline';
-import { ComplianceForecast, ComplianceForecastSkeleton, type ForecastLicense } from '@/components/dashboard/ComplianceForecast';
-import { NotificationSummary, NotificationSummarySkeleton } from '@/components/dashboard/NotificationSummary';
-import { MultiStateDashboard } from '@/components/dashboard/MultiStateDashboard';
-import { ComplianceForecastWidget, ComplianceForecastWidgetSkeleton } from '@/components/dashboard/ComplianceForecastWidget';
-import { RiskScoreGauge } from '@/components/dashboard/RiskScoreGauge';
-import { LicenseTable, type License } from '@/components/licenses/LicenseTable';
-import { LicenseQuickView } from '@/components/licenses/LicenseQuickView';
-import { ComplianceScoreCard } from './ComplianceScoreCard';
-import { QuickActions } from './QuickActions';
-import { GetStartedBanner } from './GetStartedBanner';
-
-interface LicenseDistribution { name: string; value: number; color: string }
-interface MonthlyActivity { month: string; created: number }
-interface ForecastData { riskScore: number; riskLevel: string; complianceScore: number; totalItems: number; activeItems: number; itemsNeedingAction: number; estimatedCostToMaintain: number; totalCeHoursNeeded: number }
+  ActivityTimeline,
+  ActivityTimelineSkeleton,
+  type ActivityEntry,
+} from "@/components/dashboard/ActivityTimeline";
+import {
+  ComplianceForecast,
+  ComplianceForecastSkeleton,
+  type ForecastLicense,
+} from "@/components/dashboard/ComplianceForecast";
+import { SummaryCards } from "@/components/dashboard/SummaryCards";
+import { LicenseQuickView } from "@/components/licenses/LicenseQuickView";
+import { LicenseTable, type License } from "@/components/licenses/LicenseTable";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ComplianceScoreCard } from "./ComplianceScoreCard";
+import { GetStartedBanner } from "./GetStartedBanner";
+import { QuickActions } from "./QuickActions";
 
 interface DashboardData {
-  summary: { total: number; active: number; expiringSoon: number; expired: number }
-  recentLicenses: License[]
-  recentActivity: ActivityEntry[]
-  licenseDistribution: LicenseDistribution[]
-  monthlyActivity: MonthlyActivity[]
-  expiringLicenses: ForecastLicense[]
-  forecast?: ForecastData
+  summary: {
+    total: number;
+    active: number;
+    expiringSoon: number;
+    expired: number;
+  };
+  recentLicenses: License[];
+  recentActivity: ActivityEntry[];
+  expiringLicenses: ForecastLicense[];
 }
 
 export default function DashboardPage() {
-  const t = useTranslations('dashboard');
-  const tc = useTranslations('common');
+  const t = useTranslations("dashboard");
+  const tc = useTranslations("common");
+  const { data: session } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [showGetStarted, setShowGetStarted] = useState(false);
   const [quickViewLicense, setQuickViewLicense] = useState<License | null>(null);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
-  const [forecastData, setForecastData] = useState<ForecastData | null>(null);
-  const { data: session } = useSession();
-  const router = useRouter();
 
   const fetchDashboard = useCallback(async () => {
+    setError(null);
     try {
-      const res = await fetch('/api/dashboard');
-      if (!res.ok) throw new Error('Failed to fetch dashboard data');
-      const json = await res.json();
-      setData(json);
+      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to fetch dashboard data");
+
+      const payload: DashboardData = await response.json();
+      setData(payload);
       setLastUpdated(new Date());
-      if (json.summary.total === 0) {
-        const dismissed = localStorage.getItem('dashboard_getStarted_dismissed');
-        if (!dismissed) setShowGetStarted(true);
+
+      if (payload.summary.total === 0) {
+        const dismissed = localStorage.getItem("dashboard_getStarted_dismissed");
+        setShowGetStarted(!dismissed);
+      } else {
+        setShowGetStarted(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Unknown error");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  const fetchForecast = useCallback(async () => {
-    try {
-      const res = await fetch('/api/dashboard/forecast');
-      if (!res.ok) return;
-      setForecastData(await res.json());
-    } catch { /* silently fail */ }
-  }, []);
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
 
-  useEffect(() => { fetchForecast(); }, [fetchForecast]);
-  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchDashboard();
+  };
 
-  const handleRefresh = () => { setRefreshing(true); fetchDashboard(); };
   const handleDismissGetStarted = useCallback(() => {
     setShowGetStarted(false);
-    localStorage.setItem('dashboard_getStarted_dismissed', 'true');
+    localStorage.setItem("dashboard_getStarted_dismissed", "true");
   }, []);
-  const handleDeleteLicense = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/licenses/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete license');
-      toast.success('License deleted successfully');
-      fetchDashboard();
-    } catch { toast.error('Failed to delete license'); }
-  }, [fetchDashboard]);
-  const handleQuickView = useCallback((license: License) => {
-    setQuickViewLicense(license);
-    setQuickViewOpen(true);
-  }, []);
-  const handleRenewFromQuickView = useCallback((id: string) => {
-    router.push(`/licenses/${id}`);
-  }, [router]);
 
-  const userName = session?.user?.name || 'User';
-  const firstName = userName.split(' ')[0];
+  const handleDeleteLicense = useCallback(
+    async (id: string) => {
+      try {
+        const response = await fetch(`/api/licenses/${id}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Failed to delete license");
+        toast.success("License deleted successfully");
+        fetchDashboard();
+      } catch {
+        toast.error("Failed to delete license");
+      }
+    },
+    [fetchDashboard],
+  );
+
+  const firstName = (session?.user?.name || "User").split(" ")[0];
 
   if (loading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}><CardContent className="p-4"><Skeleton className="h-4 w-20 mb-2" /><Skeleton className="h-7 w-12" /></CardContent></Card>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index}>
+              <CardContent className="p-4">
+                <Skeleton className="mb-2 h-4 w-20" />
+                <Skeleton className="h-7 w-12" />
+              </CardContent>
+            </Card>
           ))}
         </div>
-        <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div></CardContent></Card>
         <ComplianceForecastSkeleton />
         <ActivityTimelineSkeleton />
-        <NotificationSummarySkeleton />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Card className="max-w-md w-full">
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Card className="w-full max-w-md">
           <CardContent className="p-8 text-center">
-            <div className="mx-auto mb-4 flex items-center justify-center size-14 rounded-full bg-destructive/10">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-destructive/10">
               <ShieldAlert className="size-7 text-destructive" />
             </div>
-            <p className="text-lg font-semibold text-foreground">{t('loadError') || 'Failed to load dashboard'}</p>
-            <p className="text-muted-foreground text-sm mt-2">{error}</p>
+            <p className="text-lg font-semibold text-foreground">
+              {t("loadError") || "Failed to load dashboard"}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{error}</p>
             <Button onClick={handleRefresh} variant="outline" className="mt-6 gap-2">
               <RefreshCw className="size-4" />
-              {tc('retry') || 'Retry'}
+              {tc("retry") || "Retry"}
             </Button>
           </CardContent>
         </Card>
@@ -160,17 +161,27 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{t('welcomeBack')}, {firstName}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('overview')}</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            {t("welcomeBack")}, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("overview")}</p>
         </div>
         {lastUpdated && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{t('lastUpdated')}: {lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
-            <Button variant="ghost" size="icon" className="size-7" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>
+              {t("lastUpdated")}: {lastUpdated.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label={tc("retry")}
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
         )}
@@ -185,72 +196,64 @@ export default function DashboardPage() {
         expired={data.summary.expired}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ComplianceScoreCard active={data.summary.active} total={data.summary.total} />
-        {forecastData && (
-          <RiskScoreGauge
-            score={forecastData.riskScore}
-            totalItems={forecastData.totalItems}
-            itemsNeedingAction={forecastData.itemsNeedingAction}
-          />
-        )}
-      </div>
-
-      <DashboardCharts
-        licenseDistribution={data.licenseDistribution}
-        monthlyActivity={data.monthlyActivity}
-      />
-
-      <MultiStateDashboard />
-
       <AlertBanner
         expiredCount={data.summary.expired}
         expiringCount={data.summary.expiringSoon}
       />
 
-      <ProactiveAlerts />
-      <ExpirationCheckWidget />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ComplianceForecast
-          licenses={data.expiringLicenses}
-          totalLicenses={data.summary.total}
-          activeLicenses={data.summary.active}
-        />
-        <ActivityTimeline activities={data.recentActivity} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <ComplianceScoreCard active={data.summary.active} total={data.summary.total} />
+        </div>
+        <div className="lg:col-span-2">
+          <ComplianceForecast
+            licenses={data.expiringLicenses}
+            totalLicenses={data.summary.total}
+            activeLicenses={data.summary.active}
+          />
+        </div>
       </div>
 
-      <ComplianceForecastWidget />
-      <NotificationSummary />
+      <ActivityTimeline activities={data.recentActivity} />
 
-      {/* Recent Licenses */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-base">{t('recentLicenses')}</CardTitle>
-            <Badge variant="secondary" className="text-xs">{data.recentLicenses.length}</Badge>
+            <CardTitle className="text-base">{t("recentLicenses")}</CardTitle>
+            <Badge variant="secondary" className="text-xs">
+              {data.recentLicenses.length}
+            </Badge>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/licenses/new"><Plus className="size-4 me-1" />{tc('create')}</Link>
+            <Link href="/licenses/new">
+              <Plus className="me-1 size-4" />
+              {tc("create")}
+            </Link>
           </Button>
         </CardHeader>
         <CardContent className="pt-0">
           {data.recentLicenses.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="rounded-xl bg-muted p-4 mb-3">
+              <div className="mb-3 rounded-xl bg-muted p-4">
                 <FileText className="size-8 text-muted-foreground" />
               </div>
-              <p className="font-medium text-foreground">{t('emptyStateTitle')}</p>
-              <p className="text-sm text-muted-foreground mt-1">{t('emptyStateDesc')}</p>
+              <p className="font-medium text-foreground">{t("emptyStateTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("emptyStateDesc")}</p>
               <Button variant="outline" size="sm" className="mt-4" asChild>
-                <Link href="/licenses/new"><Plus className="size-4 me-1" />{tc('create')}</Link>
+                <Link href="/licenses/new">
+                  <Plus className="me-1 size-4" />
+                  {tc("create")}
+                </Link>
               </Button>
             </div>
           ) : (
             <LicenseTable
               licenses={data.recentLicenses}
               onDelete={handleDeleteLicense}
-              onQuickView={handleQuickView}
+              onQuickView={(license) => {
+                setQuickViewLicense(license);
+                setQuickViewOpen(true);
+              }}
               compact
             />
           )}
@@ -261,7 +264,7 @@ export default function DashboardPage() {
         license={quickViewLicense}
         open={quickViewOpen}
         onOpenChange={setQuickViewOpen}
-        onRenew={handleRenewFromQuickView}
+        onRenew={(id) => router.push(`/licenses/${id}`)}
       />
     </div>
   );
