@@ -1,217 +1,196 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-import { sanitizeString } from '@/lib/sanitize';
-import { dispatchWebhook } from '@/lib/webhook-delivery';
+import { Prisma } from "@prisma/client";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { sanitizeString } from "@/lib/sanitize";
+import { dispatchWebhook } from "@/lib/webhook-delivery";
 
-function computeLicenseStatus(expirationDate: Date): string {
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
+function computeLicenseStatus(expirationDate: Date, now = new Date()): string {
+  const thirtyDaysFromNow = new Date(now);
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-  if (expirationDate < now) return 'expired';
-  if (expirationDate <= thirtyDaysFromNow) return 'expiring_soon';
-  return 'active';
+  if (expirationDate < now) return "expired";
+  if (expirationDate <= thirtyDaysFromNow) return "expiring_soon";
+  return "active";
 }
 
-// GET: List licenses for the user's organization (with pagination)
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-
-    // Find user's org membership
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
-    const statusFilter = searchParams.get('status') || undefined;
-    const search = searchParams.get('search') || undefined;
-    const typeFilter = searchParams.get('type') || undefined;
+    const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(searchParams.get("limit") || "20", 10)),
+    );
+    const statusFilter = searchParams.get("status") || undefined;
+    const search = searchParams.get("search")?.trim() || undefined;
+    const typeFilter = searchParams.get("type")?.trim() || undefined;
 
-    // Build where clause
-    const where: any = { orgId: orgMember.orgId };
-
+    const where: Prisma.LicenseWhereInput = { orgId: context.orgId };
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { licenseNumber: { contains: search } },
+        { name: { contains: search, mode: "insensitive" } },
+        { licenseNumber: { contains: search, mode: "insensitive" } },
       ];
     }
+    if (typeFilter) where.type = typeFilter;
 
-    if (typeFilter) {
-      where.type = typeFilter;
-    }
-
-    // For status filtering, we need to compute date-based ranges
     const now = new Date();
-    const thirtyDaysFromNow = new Date();
+    const thirtyDaysFromNow = new Date(now);
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    if (statusFilter === 'active') {
+    if (statusFilter === "active") {
       where.expirationDate = { gt: thirtyDaysFromNow };
-    } else if (statusFilter === 'expiring_soon') {
-      where.expirationDate = { gt: now, lte: thirtyDaysFromNow };
-    } else if (statusFilter === 'expired') {
-      where.expirationDate = { lte: now };
-    } else if (statusFilter === 'renewalNeeded') {
-      // Renewal needed = expired or expiring soon
+    } else if (statusFilter === "expiring_soon") {
+      where.expirationDate = { gte: now, lte: thirtyDaysFromNow };
+    } else if (statusFilter === "expired") {
+      where.expirationDate = { lt: now };
+    } else if (statusFilter === "renewalNeeded") {
       where.expirationDate = { lte: thirtyDaysFromNow };
     }
 
-    // Get total count for pagination (with filters applied)
-    const total = await db.license.count({ where });
+    const orgWhere: Prisma.LicenseWhereInput = { orgId: context.orgId };
+    const [total, licenses, countAll, countActive, countExpiring, countExpired] =
+      await Promise.all([
+        db.license.count({ where }),
+        db.license.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        db.license.count({ where: orgWhere }),
+        db.license.count({
+          where: { ...orgWhere, expirationDate: { gt: thirtyDaysFromNow } },
+        }),
+        db.license.count({
+          where: {
+            ...orgWhere,
+            expirationDate: { gte: now, lte: thirtyDaysFromNow },
+          },
+        }),
+        db.license.count({
+          where: { ...orgWhere, expirationDate: { lt: now } },
+        }),
+      ]);
 
-    // Fetch paginated licenses
-    const licenses = await db.license.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-
-    // Add computed status to each license
-    const licensesWithStatus = licenses.map((license) => ({
-      ...license,
-      status: computeLicenseStatus(license.expirationDate),
-    }));
-
-    const totalPages = Math.ceil(total / limit);
-
-    // Compute status counts for the entire org (for tab badges)
-    // These are global counts, not affected by search/type filters
-    const orgWhere = { orgId: orgMember.orgId };
-    const [countAll, countActive, countExpiring, countExpired] = await Promise.all([
-      db.license.count({ where: orgWhere }),
-      db.license.count({ where: { ...orgWhere, expirationDate: { gt: thirtyDaysFromNow } } }),
-      db.license.count({ where: { ...orgWhere, expirationDate: { gt: now, lte: thirtyDaysFromNow } } }),
-      db.license.count({ where: { ...orgWhere, expirationDate: { lte: now } } }),
-    ]);
-
-    return NextResponse.json({
-      licenses: licensesWithStatus,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
+    return NextResponse.json(
+      {
+        licenses: licenses.map((license) => ({
+          ...license,
+          status: computeLicenseStatus(license.expirationDate, now),
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        counts: {
+          all: countAll,
+          active: countActive,
+          expiring_soon: countExpiring,
+          expired: countExpired,
+          renewal_needed: countExpiring + countExpired,
+        },
       },
-      counts: {
-        all: countAll,
-        active: countActive,
-        expiring_soon: countExpiring,
-        expired: countExpired,
-        renewal_needed: countExpiring + countExpired,
-      },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get licenses error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get licenses error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const createLicenseSchema = z.object({
-  name: z.string().min(1, 'License name is required'),
-  type: z.string().min(1, 'License type is required'),
-  licenseNumber: z.string().min(1, 'License number is required'),
-  issuedBy: z.string().min(1, 'Issuing authority is required'),
-  state: z.string().optional(),
-  issueDate: z.string().min(1, 'Issue date is required'),
-  expirationDate: z.string().min(1, 'Expiration date is required'),
-  notes: z.string().optional(),
-});
+const createLicenseSchema = z
+  .object({
+    name: z.string().trim().min(1, "License name is required").max(200),
+    type: z.string().trim().min(1, "License type is required").max(100),
+    licenseNumber: z.string().trim().min(1, "License number is required").max(100),
+    issuedBy: z.string().trim().min(1, "Issuing authority is required").max(200),
+    state: z.string().trim().max(100).optional(),
+    issueDate: z.coerce.date(),
+    expirationDate: z.coerce.date(),
+    notes: z.string().max(10_000).optional(),
+  })
+  .refine((value) => value.expirationDate >= value.issueDate, {
+    message: "Expiration date must be on or after the issue date",
+    path: ["expirationDate"],
+  });
 
-// POST: Create a new license
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-
-    // Find user's org membership and check role
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can create licenses.' },
-        { status: 403 }
+        { error: "Insufficient permissions. Only owners and admins can create licenses." },
+        { status: 403 },
       );
     }
 
-    const body = await request.json();
-    const result = createLicenseSchema.safeParse(body);
-
+    const result = createLicenseSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: result.error.issues[0]?.message || "Validation failed" },
+        { status: 400 },
       );
     }
 
-    const { name, type, licenseNumber, issuedBy, state, issueDate, expirationDate, notes } = result.data;
-
-    // Sanitize string inputs
-    const sanitizedName = sanitizeString(name);
-    const sanitizedType = sanitizeString(type);
-    const sanitizedLicenseNumber = sanitizeString(licenseNumber);
-    const sanitizedIssuedBy = sanitizeString(issuedBy);
-    const sanitizedState = state ? sanitizeString(state) : undefined;
-    const sanitizedNotes = notes ? sanitizeString(notes) : undefined;
-
-    const license = await db.license.create({
-      data: {
-        orgId: orgMember.orgId,
-        name: sanitizedName,
-        type: sanitizedType,
-        licenseNumber: sanitizedLicenseNumber,
-        issuedBy: sanitizedIssuedBy,
-        state: sanitizedState,
-        issueDate: new Date(issueDate),
-        expirationDate: new Date(expirationDate),
-        notes: sanitizedNotes,
-        createdById: userId,
+    const licenseNumber = sanitizeString(result.data.licenseNumber);
+    const duplicate = await db.license.findFirst({
+      where: {
+        orgId: context.orgId,
+        licenseNumber: { equals: licenseNumber, mode: "insensitive" },
       },
+      select: { id: true },
+    });
+    if (duplicate) {
+      return NextResponse.json(
+        { error: "A license with this number already exists in the organization." },
+        { status: 409 },
+      );
+    }
+
+    const license = await db.$transaction(async (transaction) => {
+      const created = await transaction.license.create({
+        data: {
+          orgId: context.orgId,
+          name: sanitizeString(result.data.name),
+          type: sanitizeString(result.data.type),
+          licenseNumber,
+          issuedBy: sanitizeString(result.data.issuedBy),
+          state: result.data.state ? sanitizeString(result.data.state) : undefined,
+          issueDate: result.data.issueDate,
+          expirationDate: result.data.expirationDate,
+          notes: result.data.notes ? sanitizeString(result.data.notes) : undefined,
+          createdById: context.userId,
+        },
+      });
+
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "create",
+          entityType: "license",
+          entityId: created.id,
+          entityName: created.name,
+          details: `Created license: ${created.name} (${created.licenseNumber})`,
+        },
+      });
+      return created;
     });
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'create',
-        entityType: 'license',
-        entityId: license.id,
-        entityName: license.name,
-        details: `Created license: ${license.name} (${license.licenseNumber})`,
-      },
-    });
-
-    // Fire webhook event (fire-and-forget)
-    dispatchWebhook(orgMember.orgId, 'license.created', {
+    dispatchWebhook(context.orgId, "license.created", {
       id: license.id,
       name: license.name,
       type: license.type,
@@ -219,28 +198,22 @@ export async function POST(request: Request) {
       issuedBy: license.issuedBy,
       state: license.state,
       expirationDate: license.expirationDate,
-    }).catch(console.error);
+    }).catch((error) => console.error("License webhook delivery failed:", error));
 
-    // Auto-match: find applicable state requirements for the new license
-    let suggestedRequirements: any[] = [];
+    let suggestedRequirements: unknown[] = [];
     if (license.state) {
       try {
-        const matchingRequirements = await db.stateRequirement.findMany({
-          where: {
-            state: license.state,
-            licenseType: license.type,
-          },
+        const requirements = await db.stateRequirement.findMany({
+          where: { state: license.state, licenseType: license.type },
         });
-
-        // Parse reciprocityStates JSON for convenience
-        suggestedRequirements = matchingRequirements.map((req) => ({
-          ...req,
-          reciprocityStates: req.reciprocityStates
-            ? JSON.parse(req.reciprocityStates)
+        suggestedRequirements = requirements.map((requirement) => ({
+          ...requirement,
+          reciprocityStates: requirement.reciprocityStates
+            ? JSON.parse(requirement.reciprocityStates)
             : [],
         }));
-      } catch (err) {
-        console.error('Error fetching suggested requirements:', err);
+      } catch (error) {
+        console.error("Error fetching suggested requirements:", error);
       }
     }
 
@@ -252,10 +225,10 @@ export async function POST(request: Request) {
         },
         suggestedRequirements,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
-    console.error('Create license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Create license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

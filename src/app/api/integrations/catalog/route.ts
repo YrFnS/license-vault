@@ -1,37 +1,135 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { getOrgContext } from "@/lib/org-context";
 
-// Integration catalog - product catalog data (not user data), legitimate to hardcode
 const INTEGRATION_CATALOG = [
-  // Construction ERP
-  { type: 'procore', name: 'Procore', category: 'construction_erp', icon: 'HardHat', description: 'Sync projects, RFIs, and compliance data with Procore construction management', dataFlows: ['licenses', 'projects', 'documents'] },
-  { type: 'autodesk_construction', name: 'Autodesk Construction Cloud', category: 'construction_erp', icon: 'Layers', description: 'Connect with Autodesk Construction Cloud for project document management', dataFlows: ['licenses', 'projects', 'documents'] },
-  { type: 'viewpoint', name: 'Viewpoint', category: 'construction_erp', icon: 'Building', description: 'Integrate Viewpoint ERP for construction accounting and project management', dataFlows: ['licenses', 'projects', 'contractors'] },
-  { type: 'cmic', name: 'CMiC', category: 'construction_erp', icon: 'Building', description: 'Connect CMiC for enterprise construction management and payroll', dataFlows: ['licenses', 'projects', 'contractors'] },
-  // Accounting
-  { type: 'quickbooks', name: 'QuickBooks', category: 'accounting', icon: 'Calculator', description: 'Sync financial data, invoices, and expense tracking with QuickBooks', dataFlows: ['licenses', 'contractors', 'documents'] },
-  { type: 'sage', name: 'Sage', category: 'accounting', icon: 'DollarSign', description: 'Connect Sage for accounting, payroll, and financial reporting', dataFlows: ['licenses', 'contractors', 'documents'] },
-  { type: 'freshbooks', name: 'FreshBooks', category: 'accounting', icon: 'Calculator', description: 'Sync invoicing and expense tracking with FreshBooks', dataFlows: ['licenses', 'contractors'] },
-  { type: 'xero', name: 'Xero', category: 'accounting', icon: 'Calculator', description: 'Connect Xero for cloud-based accounting and bookkeeping', dataFlows: ['licenses', 'contractors', 'documents'] },
-  // HR & Payroll
-  { type: 'adp', name: 'ADP', category: 'hris', icon: 'Users', description: 'Sync employee data, payroll, and compliance with ADP workforce management', dataFlows: ['licenses', 'contractors', 'documents'] },
-  { type: 'workday', name: 'Workday', category: 'hris', icon: 'Users', description: 'Connect Workday for HR, payroll, and workforce planning', dataFlows: ['licenses', 'contractors'] },
-  { type: 'bamboohr', name: 'BambooHR', category: 'hris', icon: 'Users', description: 'Sync employee records and compliance tracking with BambooHR', dataFlows: ['licenses', 'contractors'] },
-  { type: 'gusto', name: 'Gusto', category: 'hris', icon: 'Users', description: 'Connect Gusto for payroll, benefits, and HR management', dataFlows: ['licenses', 'contractors'] },
-];
+  {
+    type: "procore",
+    name: "Procore",
+    category: "construction_erp",
+    icon: "HardHat",
+    description:
+      "Verify and store a Procore API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "projects", "documents"],
+  },
+  {
+    type: "autodesk_construction",
+    name: "Autodesk Construction Cloud",
+    category: "construction_erp",
+    icon: "Layers",
+    description:
+      "Verify and store an Autodesk Construction API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "projects", "documents"],
+  },
+  {
+    type: "viewpoint",
+    name: "Viewpoint",
+    category: "construction_erp",
+    icon: "Building",
+    description:
+      "Verify and store a Viewpoint API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "projects", "contractors"],
+  },
+  {
+    type: "cmic",
+    name: "CMiC",
+    category: "construction_erp",
+    icon: "Building",
+    description:
+      "Verify and store a CMiC API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "projects", "contractors"],
+  },
+  {
+    type: "quickbooks",
+    name: "QuickBooks",
+    category: "accounting",
+    icon: "Calculator",
+    description:
+      "Verify and store an API endpoint securely. A supported OAuth and data-sync adapter is required for production QuickBooks sync.",
+    dataFlows: ["licenses", "contractors", "documents"],
+  },
+  {
+    type: "sage",
+    name: "Sage",
+    category: "accounting",
+    icon: "DollarSign",
+    description:
+      "Verify and store a Sage API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors", "documents"],
+  },
+  {
+    type: "freshbooks",
+    name: "FreshBooks",
+    category: "accounting",
+    icon: "Calculator",
+    description:
+      "Verify and store a FreshBooks API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors"],
+  },
+  {
+    type: "xero",
+    name: "Xero",
+    category: "accounting",
+    icon: "Calculator",
+    description:
+      "Verify and store a Xero API endpoint securely. A supported OAuth and data-sync adapter is required for production sync.",
+    dataFlows: ["licenses", "contractors", "documents"],
+  },
+  {
+    type: "adp",
+    name: "ADP",
+    category: "hris",
+    icon: "Users",
+    description:
+      "Verify and store an ADP API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors", "documents"],
+  },
+  {
+    type: "workday",
+    name: "Workday",
+    category: "hris",
+    icon: "Users",
+    description:
+      "Verify and store a Workday API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors"],
+  },
+  {
+    type: "bamboohr",
+    name: "BambooHR",
+    category: "hris",
+    icon: "Users",
+    description:
+      "Verify and store a BambooHR API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors"],
+  },
+  {
+    type: "gusto",
+    name: "Gusto",
+    category: "hris",
+    icon: "Users",
+    description:
+      "Verify and store a Gusto API endpoint securely. Automatic record sync requires a provider adapter.",
+    dataFlows: ["licenses", "contractors"],
+  },
+].map((integration) => ({
+  ...integration,
+  connectionAvailable: true,
+  syncAvailable: false,
+  availability: "connection_only" as const,
+}));
 
-// GET: Integration catalog (requires auth)
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    return NextResponse.json({ catalog: INTEGRATION_CATALOG });
+    return NextResponse.json(
+      { catalog: INTEGRATION_CATALOG },
+      { headers: { "Cache-Control": "private, max-age=300" } },
+    );
   } catch (error) {
-    console.error('Error fetching integration catalog:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error fetching integration catalog:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

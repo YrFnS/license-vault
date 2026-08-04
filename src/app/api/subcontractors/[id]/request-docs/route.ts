@@ -1,94 +1,113 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import crypto from 'crypto';
-import { sendSubcontractorPortalInvite } from '@/lib/email';
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { db } from "@/lib/db";
+import { sendSubcontractorPortalInvite } from "@/lib/email";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
 
-// POST: Send document request email to subcontractor
+const PORTAL_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role as string)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
+        { error: "Only organization owners and admins can request documents." },
+        { status: 403 },
       );
     }
 
+    const { id } = await params;
     const subcontractor = await db.subcontractor.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
-    if (!subcontractor) {
-      return NextResponse.json({ error: 'Subcontractor not found' }, { status: 404 });
-    }
-
-    // Regenerate upload token for security
-    const newToken = crypto.randomUUID();
-
-    await db.subcontractor.update({
-      where: { id },
-      data: { uploadToken: newToken },
-    });
-
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'request_docs',
-        entityType: 'subcontractor',
-        entityId: subcontractor.id,
-        entityName: subcontractor.companyName,
-        details: `Requested documents from subcontractor: ${subcontractor.companyName}`,
+      where: { id, orgId: context.orgId },
+      select: {
+        id: true,
+        companyName: true,
+        email: true,
+        status: true,
       },
     });
-
-    // Construct the upload URL for the portal
-    const appUrl = process.env.NEXTAUTH_URL || process.env.APP_URL || new URL(request.url).origin;
-    const uploadUrl = `${appUrl}/subcontractor-upload?token=${newToken}`;
-
-    // Send portal invitation email to the subcontractor (fire-and-forget)
-    if (subcontractor.email) {
-      const org = await db.organization.findUnique({ where: { id: orgMember.orgId } });
-
-      sendSubcontractorPortalInvite(
-        subcontractor.email,
-        {
-          orgName: org?.name || org?.companyName || 'License Vault',
-          portalUrl: uploadUrl,
-          companyName: subcontractor.companyName,
-        },
-        orgMember.orgId
-      ).catch(err => console.error('Failed to send subcontractor portal invite email:', err));
+    if (!subcontractor) {
+      return NextResponse.json(
+        { error: "Subcontractor not found" },
+        { status: 404 },
+      );
     }
+    if (!subcontractor.email) {
+      return NextResponse.json(
+        { error: "Add a valid subcontractor email before requesting documents." },
+        { status: 400 },
+      );
+    }
+    if (subcontractor.status !== "active") {
+      return NextResponse.json(
+        { error: "Document requests can only be sent to active subcontractors." },
+        { status: 400 },
+      );
+    }
+
+    const portalToken = crypto.randomBytes(32).toString("base64url");
+    const portalExpiresAt = new Date(Date.now() + PORTAL_LIFETIME_MS);
+
+    await db.$transaction(async (transaction) => {
+      await transaction.subcontractor.update({
+        where: { id: subcontractor.id },
+        data: {
+          portalToken,
+          portalExpiresAt,
+          complianceStatus: "pending",
+        },
+      });
+      await transaction.projectSubcontractor.updateMany({
+        where: { subcontractorId: subcontractor.id },
+        data: { complianceStatus: "pending", lastChecked: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "request_docs",
+          entityType: "subcontractor",
+          entityId: subcontractor.id,
+          entityName: subcontractor.companyName,
+          details: JSON.stringify({
+            recipient: subcontractor.email,
+            expiresAt: portalExpiresAt.toISOString(),
+          }),
+        },
+      });
+    });
+
+    const appUrl =
+      process.env.NEXTAUTH_URL ||
+      process.env.APP_URL ||
+      new URL(request.url).origin;
+    const portalUrl = `${appUrl}/en/subcontractor-upload?token=${encodeURIComponent(portalToken)}`;
+
+    sendSubcontractorPortalInvite(
+      subcontractor.email,
+      {
+        orgName: context.orgName,
+        portalUrl,
+        companyName: subcontractor.companyName,
+      },
+      context.orgId,
+    ).catch((error) =>
+      console.error("Failed to send subcontractor portal invite email:", error),
+    );
 
     return NextResponse.json({
       success: true,
-      uploadUrl,
-      token: newToken,
+      portalUrl,
+      expiresAt: portalExpiresAt.toISOString(),
     });
   } catch (error) {
-    console.error('Request docs error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Request docs error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

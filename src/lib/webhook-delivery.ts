@@ -1,12 +1,11 @@
-// Webhook delivery library for License Vault
-// Finds active webhooks matching an event and dispatches HTTP POST payloads with HMAC signatures
-
-import { db } from '@/lib/db';
-import crypto from 'crypto';
+import crypto from "node:crypto";
+import { db } from "@/lib/db";
+import { assertSafeWebhookUrl } from "@/lib/safe-webhook-url";
+import { decryptWebhookSecret } from "@/lib/webhook-secret";
 
 interface WebhookPayload {
   event: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   timestamp: string;
   orgId: string;
 }
@@ -18,31 +17,20 @@ interface DispatchResult {
   error?: string;
 }
 
-/**
- * Dispatch a webhook event to all active webhooks in the organization that subscribe to this event.
- *
- * @param orgId  The organization ID to scope the webhook lookup
- * @param event  The event name (e.g. "license.created")
- * @param data   Arbitrary data to include in the payload
- * @returns      Array of settled results (one per matching webhook)
- */
 export async function dispatchWebhook(
   orgId: string,
   event: string,
-  data: Record<string, any>
+  data: Record<string, unknown>,
 ): Promise<PromiseSettledResult<DispatchResult>[]> {
-  // Find all active webhooks for this org
   const webhooks = await db.webhook.findMany({
     where: { orgId, isActive: true },
   });
 
-  // Filter to webhooks that listen for this event (or wildcard "*")
-  const matchingWebhooks = webhooks.filter((wh) => {
-    const events: string[] = wh.events.split(',').map((e) => e.trim());
-    return events.includes(event) || events.includes('*');
+  const matchingWebhooks = webhooks.filter((webhook) => {
+    const events = webhook.events.split(",").map((item) => item.trim());
+    return events.includes(event) || events.includes("*");
   });
 
-  // Nothing to dispatch
   if (matchingWebhooks.length === 0) return [];
 
   const payload: WebhookPayload = {
@@ -52,47 +40,57 @@ export async function dispatchWebhook(
     orgId,
   };
 
-  const results = await Promise.allSettled(
+  return Promise.allSettled(
     matchingWebhooks.map(async (webhook): Promise<DispatchResult> => {
-      const body = JSON.stringify(payload);
-      const signature = crypto
-        .createHmac('sha256', webhook.secret)
-        .update(body)
-        .digest('hex');
-
       try {
-        const response = await fetch(webhook.url, {
-          method: 'POST',
+        const body = JSON.stringify(payload);
+        const signature = crypto
+          .createHmac("sha256", decryptWebhookSecret(webhook.secret))
+          .update(body)
+          .digest("hex");
+        const safeUrl = await assertSafeWebhookUrl(webhook.url);
+        const response = await fetch(safeUrl, {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': `sha256=${signature}`,
-            'X-Webhook-Event': event,
-            'X-Webhook-Delivery-ID': crypto.randomUUID(),
+            "Content-Type": "application/json",
+            "X-Webhook-Signature": `sha256=${signature}`,
+            "X-Webhook-Event": event,
+            "X-Webhook-Delivery-ID": crypto.randomUUID(),
           },
           body,
-          signal: AbortSignal.timeout(10000), // 10s timeout
+          redirect: "manual",
+          signal: AbortSignal.timeout(10_000),
         });
 
-        // Update webhook stats
+        const redirected = response.status >= 300 && response.status < 400;
+        const ok = response.ok && !redirected;
+
         await db.webhook.update({
           where: { id: webhook.id },
           data: {
             lastTriggeredAt: new Date(),
-            failureCount: response.ok ? 0 : webhook.failureCount + 1,
+            failureCount: ok ? 0 : { increment: 1 },
           },
         });
 
-        return { webhookId: webhook.id, status: response.status, ok: response.ok };
+        return {
+          webhookId: webhook.id,
+          status: response.status,
+          ok,
+          ...(redirected ? { error: "Redirects are not allowed for webhook delivery" } : {}),
+        };
       } catch (error) {
         await db.webhook.update({
           where: { id: webhook.id },
-          data: { failureCount: webhook.failureCount + 1 },
+          data: { failureCount: { increment: 1 } },
         });
 
-        return { webhookId: webhook.id, error: String(error), ok: false };
+        return {
+          webhookId: webhook.id,
+          error: error instanceof Error ? error.message : String(error),
+          ok: false,
+        };
       }
-    })
+    }),
   );
-
-  return results;
 }

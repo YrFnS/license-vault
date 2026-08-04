@@ -1,82 +1,81 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { getOrgContext } from "@/lib/org-context";
 
-// GET: List notifications for current user
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-
     const notifications = await db.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        userId: context.userId,
+        orgId: context.orgId,
+      },
+      orderBy: { createdAt: "desc" },
       take: 50,
     });
 
-    const unreadCount = notifications.filter((n) => !n.read).length;
-
-    return NextResponse.json({ notifications, unreadCount });
+    return NextResponse.json(
+      {
+        notifications,
+        unreadCount: notifications.filter((notification) => !notification.read).length,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get notifications error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get notifications error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const markReadSchema = z.object({
-  notificationIds: z.array(z.string()).optional(),
-  markAll: z.boolean().optional(),
-});
+const markReadSchema = z
+  .object({
+    notificationIds: z.array(z.string().min(1)).max(100).optional(),
+    markAll: z.boolean().optional(),
+  })
+  .refine(
+    (value) => value.markAll === true || Boolean(value.notificationIds?.length),
+    { message: "Select at least one notification" },
+  );
 
-// PUT: Mark notifications as read
 export async function PUT(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-
-    const body = await request.json();
-    const result = markReadSchema.safeParse(body);
-
+    const result = markReadSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: result.error.issues[0]?.message || "Validation failed" },
+        { status: 400 },
       );
     }
 
-    const { notificationIds, markAll } = result.data;
+    const baseWhere = {
+      userId: context.userId,
+      orgId: context.orgId,
+      read: false,
+    };
 
-    if (markAll) {
-      // Mark all notifications as read
-      await db.notification.updateMany({
-        where: { userId, read: false },
-        data: { read: true },
-      });
-    } else if (notificationIds && notificationIds.length > 0) {
-      // Mark specific notifications as read
-      await db.notification.updateMany({
-        where: {
-          id: { in: notificationIds },
-          userId,
-        },
-        data: { read: true },
-      });
-    }
+    await db.notification.updateMany({
+      where: result.data.markAll
+        ? baseWhere
+        : {
+            ...baseWhere,
+            id: { in: result.data.notificationIds || [] },
+          },
+      data: { read: true },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Mark notifications error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Mark notifications error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,158 +1,235 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  decryptIntegrationConfig,
+  encryptIntegrationConfig,
+  getSafeIntegrationConfig,
+  hasAutomaticSyncAdapter,
+  integrationConfigSchema,
+  testIntegrationConnection,
+} from "@/lib/integration-config";
 
-const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  config: z.string().optional(),
-  status: z.string().optional(),
-  isActive: z.boolean().optional(),
-});
+export const runtime = "nodejs";
 
-// GET: Get integration details
+const updateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    config: integrationConfigSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "No changes supplied");
+
+function serializeIntegration<
+  T extends {
+    config: string | null;
+    type: string;
+    status: string;
+    lastError: string | null;
+  },
+>(integration: T) {
+  const config = decryptIntegrationConfig(integration.config);
+  const safeConfig = getSafeIntegrationConfig(config);
+  return {
+    ...integration,
+    config: JSON.stringify(safeConfig),
+    status: safeConfig.credentialConfigured
+      ? integration.status
+      : "disconnected",
+    lastError: safeConfig.credentialConfigured
+      ? integration.lastError
+      : "Reconnect this integration to replace the legacy or missing credential.",
+    syncAvailable: hasAutomaticSyncAdapter(integration.type),
+  };
+}
+
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const integration = await db.integration.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId, isActive: true },
       include: {
         syncLogs: {
-          orderBy: { startedAt: 'desc' },
+          orderBy: { startedAt: "desc" },
           take: 20,
         },
       },
     });
-
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Integration not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({ integration });
+    return NextResponse.json(
+      { integration: serializeIntegration(integration) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Error fetching integration:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error fetching integration:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// PUT: Update integration settings
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can update integrations." },
+        { status: 403 },
+      );
     }
 
     const { id } = await params;
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const existing = await db.integration.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId, isActive: true },
     });
     if (!existing) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Integration not found" },
+        { status: 404 },
+      );
     }
 
-    const body = await request.json();
-    const validated = updateSchema.parse(body);
+    const result = updateSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
 
-    const integration = await db.integration.update({
-      where: { id },
-      data: validated,
+    let connection:
+      | Awaited<ReturnType<typeof testIntegrationConnection>>
+      | undefined;
+    if (result.data.config) {
+      connection = await testIntegrationConnection(result.data.config);
+      if (!connection.success) {
+        return NextResponse.json(
+          { error: connection.message, connection },
+          { status: 422 },
+        );
+      }
+    }
+
+    const integration = await db.$transaction(async (transaction) => {
+      const updated = await transaction.integration.update({
+        where: { id: existing.id },
+        data: {
+          ...(result.data.name
+            ? { name: sanitizeString(result.data.name) }
+            : {}),
+          ...(result.data.config
+            ? {
+                config: encryptIntegrationConfig(result.data.config),
+                status: "connected",
+                lastSyncStatus: "connection_verified",
+                lastError: null,
+              }
+            : {}),
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "integration_updated",
+          entityType: "integration",
+          entityId: updated.id,
+          entityName: updated.name,
+          details: JSON.stringify({
+            updatedFields: Object.keys(result.data),
+            endpoint: result.data.config?.baseUrl,
+            latencyMs: connection?.latencyMs,
+          }),
+        },
+      });
+      return updated;
     });
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'integration_updated',
-        entityType: 'integration',
-        entityId: integration.id,
-        entityName: integration.name,
-        details: `Updated integration ${integration.name}`,
-      },
+    return NextResponse.json({
+      integration: serializeIntegration(integration),
+      connection: connection || null,
     });
-
-    return NextResponse.json({ integration });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Validation error', details: error.issues }, { status: 400 });
-    }
-    console.error('Error updating integration:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error updating integration:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// DELETE: Disconnect integration
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can disconnect integrations." },
+        { status: 403 },
+      );
     }
 
     const { id } = await params;
-    const userId = (session.user as any).id;
-    const orgMember = await db.orgMember.findFirst({ where: { userId } });
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const existing = await db.integration.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId, isActive: true },
     });
     if (!existing) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Integration not found" },
+        { status: 404 },
+      );
     }
 
-    // Soft delete by setting isActive = false and status = disconnected
-    const integration = await db.integration.update({
-      where: { id },
-      data: { isActive: false, status: 'disconnected' },
-    });
-
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'integration_disconnected',
-        entityType: 'integration',
-        entityId: integration.id,
-        entityName: integration.name,
-        details: `Disconnected ${integration.name} (${integration.type})`,
-      },
+    await db.$transaction(async (transaction) => {
+      await transaction.integration.update({
+        where: { id: existing.id },
+        data: {
+          isActive: false,
+          status: "disconnected",
+          config: null,
+          lastError: null,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "integration_disconnected",
+          entityType: "integration",
+          entityId: existing.id,
+          entityName: existing.name,
+          details: JSON.stringify({ type: existing.type }),
+        },
+      });
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting integration:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Error disconnecting integration:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

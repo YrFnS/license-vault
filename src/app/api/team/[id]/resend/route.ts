@@ -1,100 +1,95 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { sendTeamInvitation } from '@/lib/email';
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { sendTeamInvitation } from "@/lib/email";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { createTeamInvitationToken } from "@/lib/team-invitation";
 
-// POST: Resend an invite (owner/admin only)
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can resend invitations." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id: memberId } = await params;
-
-    // Find the current user's org membership and role
-    const currentUserMember = await db.orgMember.findFirst({
-      where: { userId },
+    const invitation = await db.orgMember.findFirst({
+      where: { id: memberId, orgId: context.orgId },
     });
-
-    if (!currentUserMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    if (!invitation || invitation.joinedAt) {
+      return NextResponse.json({ error: "Pending invitation not found" }, { status: 404 });
     }
-
-    // Check permissions: only owner or admin can resend invites
-    if (!['owner', 'admin'].includes(currentUserMember.role as string)) {
+    if (context.role === "admin" && invitation.role === "admin") {
       return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can resend invites.' },
-        { status: 403 }
+        { error: "Only an owner can resend an administrator invitation." },
+        { status: 403 },
       );
     }
 
-    // Find the target member
-    const targetMember = await db.orgMember.findUnique({
-      where: { id: memberId },
+    const updatedInvitation = await db.$transaction(async (transaction) => {
+      const updated = await transaction.orgMember.update({
+        where: { id: invitation.id },
+        data: { invitedAt: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "resend_invite",
+          entityType: "member",
+          entityId: invitation.id,
+          entityName: invitation.email,
+          details: JSON.stringify({ role: invitation.role }),
+        },
+      });
+      return updated;
     });
 
-    if (!targetMember) {
-      return NextResponse.json({ error: 'Invite not found' }, { status: 404 });
-    }
-
-    // Ensure the target member belongs to the same org
-    if (targetMember.orgId !== currentUserMember.orgId) {
-      return NextResponse.json({ error: 'Invite not found' }, { status: 404 });
-    }
-
-    // Can only resend pending invites (no joinedAt means not yet accepted)
-    if (targetMember.joinedAt) {
-      return NextResponse.json(
-        { error: 'Cannot resend an invite that has already been accepted.' },
-        { status: 400 }
-      );
-    }
-
-    // Update invitedAt to current date
-    const updatedMember = await db.orgMember.update({
-      where: { id: memberId },
-      data: { invitedAt: new Date() },
+    const token = createTeamInvitationToken({
+      memberId: updatedInvitation.id,
+      orgId: context.orgId,
+      email: updatedInvitation.email,
+      invitedAt: updatedInvitation.invitedAt,
     });
-
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: currentUserMember.orgId,
-        userId,
-        action: 'resend_invite',
-        entityType: 'member',
-        entityId: memberId,
-        entityName: targetMember.email,
-        details: `Resent invite to ${targetMember.email}`,
-      },
-    });
-
-    // Send team invitation email (fire-and-forget)
-    const inviterUser = await db.user.findUnique({ where: { id: userId } });
-    const org = await db.organization.findUnique({ where: { id: currentUserMember.orgId } });
-    const appUrl = process.env.NEXTAUTH_URL || process.env.APP_URL || new URL(request.url).origin;
+    const appUrl =
+      process.env.NEXTAUTH_URL ||
+      process.env.APP_URL ||
+      new URL(request.url).origin;
 
     sendTeamInvitation(
-      targetMember.email,
+      updatedInvitation.email,
       {
-        inviterName: inviterUser?.name || inviterUser?.email || 'A team member',
-        orgName: org?.name || org?.companyName || 'License Vault',
-        acceptUrl: `${appUrl}/signup?invite=${encodeURIComponent(targetMember.email)}`,
-        role: targetMember.role,
+        inviterName: context.email,
+        orgName: context.orgName,
+        acceptUrl: `${appUrl}/en/invite/${encodeURIComponent(token)}`,
+        role: updatedInvitation.role,
       },
-      currentUserMember.orgId
-    ).catch(err => console.error('Failed to resend team invitation email:', err));
+      context.orgId,
+    ).catch((error) =>
+      console.error("Failed to resend team invitation email:", error),
+    );
 
-    return NextResponse.json({ member: updatedMember });
+    return NextResponse.json({
+      member: {
+        id: updatedInvitation.id,
+        email: updatedInvitation.email,
+        fullName: updatedInvitation.fullName,
+        role: updatedInvitation.role,
+        invitedAt: updatedInvitation.invitedAt,
+        joinedAt: null,
+        status: "pending",
+      },
+    });
   } catch (error) {
-    console.error('Resend invite error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Resend invite error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

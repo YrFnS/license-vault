@@ -27,5 +27,24 @@
   "saveRole": "Save Role",
   "cancelSuccess": "Invitation cancelled successfully",
   "resendSuccess": "Invitation resent successfully",
-  "cancelConfirm": "Are you sure you want to cancel this invitation?"
+  "cancelConfirm": "Are you sure you want to cancel this invitation?",
+  "invitation": {
+    "title": "Join {organization}",
+    "description": "You were invited as {role} using {email}.",
+    "expires": "This invitation expires on {date}.",
+    "invalidTitle": "Invitation unavailable",
+    "invalidDescription": "This link is invalid, expired, cancelled, or already used.",
+    "wrongAccount": "Sign in with {email} to accept this invitation.",
+    "password": "Password",
+    "name": "Full name",
+    "confirmPassword": "Confirm password",
+    "signIn": "Sign in and accept",
+    "createAccount": "Create account and join",
+    "accept": "Accept invitation",
+    "accepting": "Joining organization...",
+    "success": "Invitation accepted",
+    "passwordMismatch": "Passwords do not match",
+    "passwordRequirements": "Use at least 8 characters with uppercase, lowercase, and a number.",
+    "signOut": "Sign out and use the invited account"
+  }
 }

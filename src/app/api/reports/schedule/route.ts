@@ -1,48 +1,149 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
 
-// GET: Return the current schedule settings for the org
+const DEFAULT_CONFIG = {
+  frequency: "monthly" as const,
+  recipients: [] as string[],
+  reportType: "compliance" as const,
+  format: "pdf" as const,
+  enabled: false,
+  lastSentAt: null as string | null,
+};
+
+const scheduleSchema = z.object({
+  frequency: z.enum(["weekly", "monthly", "quarterly"]).default("monthly"),
+  recipients: z
+    .array(z.string().trim().email().max(320))
+    .max(50)
+    .default([]),
+  reportType: z.enum(["compliance", "full", "licenses"]).default("compliance"),
+  format: z.enum(["pdf", "csv"]).default("pdf"),
+  enabled: z.boolean().default(false),
+});
+
+function parseRecipients(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.filter((item): item is string => typeof item === "string"))];
+  } catch {
+    return [];
+  }
+}
+
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const scheduledReport = await db.scheduledReport.findUnique({
-      where: { orgId: orgMember.orgId },
+      where: { orgId: context.orgId },
     });
-
     if (!scheduledReport) {
-      return NextResponse.json({
+      return NextResponse.json(
+        { config: DEFAULT_CONFIG },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    return NextResponse.json(
+      {
         config: {
-          frequency: 'monthly',
-          recipients: [],
-          reportType: 'compliance',
-          format: 'pdf',
-          enabled: false,
+          frequency: scheduledReport.frequency,
+          recipients: parseRecipients(scheduledReport.recipients),
+          reportType: scheduledReport.reportType,
+          format: scheduledReport.format,
+          enabled: scheduledReport.enabled,
+          lastSentAt: scheduledReport.lastSentAt?.toISOString() || null,
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("Get schedule error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        {
+          error:
+            "Only organization owners and admins can configure scheduled reports.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const result = scheduleSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const recipients = [
+      ...new Set(result.data.recipients.map((email) => email.toLowerCase())),
+    ];
+    if (result.data.enabled && recipients.length === 0) {
+      return NextResponse.json(
+        { error: "Add at least one recipient before enabling scheduled reports." },
+        { status: 400 },
+      );
+    }
+
+    const scheduledReport = await db.$transaction(async (transaction) => {
+      const saved = await transaction.scheduledReport.upsert({
+        where: { orgId: context.orgId },
+        update: {
+          frequency: result.data.frequency,
+          recipients: JSON.stringify(recipients),
+          reportType: result.data.reportType,
+          format: result.data.format,
+          enabled: result.data.enabled,
+        },
+        create: {
+          orgId: context.orgId,
+          frequency: result.data.frequency,
+          recipients: JSON.stringify(recipients),
+          reportType: result.data.reportType,
+          format: result.data.format,
+          enabled: result.data.enabled,
         },
       });
-    }
-
-    let recipients: string[] = [];
-    try {
-      recipients = JSON.parse(scheduledReport.recipients);
-    } catch {
-      recipients = [];
-    }
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "scheduled_report_updated",
+          entityType: "scheduled_report",
+          entityId: saved.id,
+          entityName: `Scheduled Report (${saved.frequency})`,
+          details: JSON.stringify({
+            frequency: saved.frequency,
+            enabled: saved.enabled,
+            reportType: saved.reportType,
+            format: saved.format,
+            recipientCount: recipients.length,
+          }),
+        },
+      });
+      return saved;
+    });
 
     return NextResponse.json({
       config: {
@@ -55,100 +156,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Get schedule error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-// POST: Create/update a scheduled report configuration
-export async function POST(request: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can configure scheduled reports.' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const { frequency, recipients, reportType, format, enabled } = body;
-
-    // Validate
-    if (frequency && !['weekly', 'monthly', 'quarterly'].includes(frequency)) {
-      return NextResponse.json({ error: 'Invalid frequency' }, { status: 400 });
-    }
-    if (reportType && !['compliance', 'full', 'licenses'].includes(reportType)) {
-      return NextResponse.json({ error: 'Invalid report type' }, { status: 400 });
-    }
-    if (format && !['pdf', 'csv'].includes(format)) {
-      return NextResponse.json({ error: 'Invalid format' }, { status: 400 });
-    }
-    if (recipients && !Array.isArray(recipients)) {
-      return NextResponse.json({ error: 'Recipients must be an array' }, { status: 400 });
-    }
-
-    const recipientsJson = JSON.stringify(recipients || []);
-
-    // Upsert: one scheduled report per org
-    const scheduledReport = await db.scheduledReport.upsert({
-      where: { orgId: orgMember.orgId },
-      update: {
-        frequency: frequency || 'monthly',
-        recipients: recipientsJson,
-        reportType: reportType || 'compliance',
-        format: format || 'pdf',
-        enabled: enabled !== undefined ? enabled : false,
-      },
-      create: {
-        orgId: orgMember.orgId,
-        frequency: frequency || 'monthly',
-        recipients: recipientsJson,
-        reportType: reportType || 'compliance',
-        format: format || 'pdf',
-        enabled: enabled !== undefined ? enabled : false,
-      },
-    });
-
-    // Audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'update',
-        entityType: 'scheduled_report',
-        entityId: scheduledReport.id,
-        entityName: `Scheduled Report (${scheduledReport.frequency})`,
-        details: `Updated scheduled report: ${scheduledReport.frequency}, enabled=${scheduledReport.enabled}, recipients=${recipientsJson}`,
-      },
-    });
-
-    return NextResponse.json({
-      config: {
-        frequency: scheduledReport.frequency,
-        recipients: JSON.parse(scheduledReport.recipients),
-        reportType: scheduledReport.reportType,
-        format: scheduledReport.format,
-        enabled: scheduledReport.enabled,
-        lastSentAt: scheduledReport.lastSentAt?.toISOString() || null,
-      },
-    });
-  } catch (error) {
-    console.error('Save schedule error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Save schedule error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

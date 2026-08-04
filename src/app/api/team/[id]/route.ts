@@ -1,100 +1,84 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
 
-// DELETE: Remove a team member (owner/admin only)
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can remove members." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id: memberId } = await params;
-
-    // Find the current user's org membership and role
-    const currentUserMember = await db.orgMember.findFirst({
-      where: { userId },
+    const targetMember = await db.orgMember.findFirst({
+      where: { id: memberId, orgId: context.orgId },
     });
-
-    if (!currentUserMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    // Check permissions: only owner or admin can remove members
-    if (!['owner', 'admin'].includes(currentUserMember.role as string)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can remove members.' },
-        { status: 403 }
-      );
-    }
-
-    // Find the target member
-    const targetMember = await db.orgMember.findUnique({
-      where: { id: memberId },
-    });
-
     if (!targetMember) {
-      return NextResponse.json({ error: 'Member not found' }, { status: 404 });
+      return NextResponse.json({ error: "Member not found" }, { status: 404 });
     }
 
-    // Ensure the target member belongs to the same org
-    if (targetMember.orgId !== currentUserMember.orgId) {
-      return NextResponse.json({ error: 'Member not found' }, { status: 404 });
-    }
-
-    // Cannot remove yourself (use leave org instead)
-    if (targetMember.userId === userId) {
+    if (!targetMember.joinedAt) {
       return NextResponse.json(
-        { error: 'Cannot remove yourself. Use leave organization instead.' },
-        { status: 400 }
+        { error: "This invitation is still pending. Cancel the invitation instead." },
+        { status: 400 },
+      );
+    }
+    if (targetMember.userId === context.userId) {
+      return NextResponse.json(
+        { error: "You cannot remove your own membership." },
+        { status: 400 },
+      );
+    }
+    if (context.role === "admin" && targetMember.role !== "member") {
+      return NextResponse.json(
+        { error: "Administrators can remove members only. An owner must manage admins." },
+        { status: 403 },
       );
     }
 
-    // Cannot remove the last owner
-    if (targetMember.role === 'owner') {
+    if (targetMember.role === "owner") {
       const ownerCount = await db.orgMember.count({
         where: {
-          orgId: currentUserMember.orgId,
-          role: 'owner',
+          orgId: context.orgId,
+          role: "owner",
           joinedAt: { not: null },
         },
       });
-
       if (ownerCount <= 1) {
         return NextResponse.json(
-          { error: 'Cannot remove the last owner. Transfer ownership first.' },
-          { status: 400 }
+          { error: "The last owner cannot be removed. Transfer ownership first." },
+          { status: 400 },
         );
       }
     }
 
-    // Delete the member
-    await db.orgMember.delete({
-      where: { id: memberId },
+    await db.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "remove_member",
+          entityType: "member",
+          entityId: targetMember.id,
+          entityName: targetMember.email,
+          details: JSON.stringify({ previousRole: targetMember.role }),
+        },
+      });
+      await transaction.orgMember.delete({ where: { id: targetMember.id } });
     });
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: currentUserMember.orgId,
-        userId,
-        action: 'remove_member',
-        entityType: 'member',
-        entityId: memberId,
-        entityName: targetMember.email,
-        details: `Removed ${targetMember.email} from the organization`,
-      },
-    });
-
-    return NextResponse.json({ message: 'Member removed successfully' });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Remove member error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Remove member error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

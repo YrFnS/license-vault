@@ -1,152 +1,184 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { getOrgContext } from "@/lib/org-context";
 
-// GET: Reports data
-export async function GET() {
+function getLocale(request: Request): string {
+  const language = request.headers.get("accept-language")?.split(",")[0]?.trim();
+  return language || "en";
+}
+
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-
-    // Find user's org membership
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    const orgId = orgMember.orgId;
     const now = new Date();
-    const thirtyDaysFromNow = new Date();
+    const thirtyDaysFromNow = new Date(now);
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    const ninetyDaysFromNow = new Date();
+    const ninetyDaysFromNow = new Date(now);
     ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
-    // Get all licenses for the org
-    const licenses = await db.license.findMany({
-      where: { orgId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const total = licenses.length;
-    const active = licenses.filter(
-      (l) => l.expirationDate > thirtyDaysFromNow
-    ).length;
-    const expiringSoon = licenses.filter(
-      (l) => l.expirationDate >= now && l.expirationDate <= thirtyDaysFromNow
-    ).length;
-    const expired = licenses.filter(
-      (l) => l.expirationDate < now
-    ).length;
-
-    // Compliance score
-    const complianceScore = total > 0
-      ? Math.round(((total - expired) / total) * 100)
-      : 100;
-
-    // License distribution by type
-    const typeMap = new Map<string, number>();
-    for (const license of licenses) {
-      const type = license.type || 'Other';
-      typeMap.set(type, (typeMap.get(type) || 0) + 1);
-    }
-    const licenseDistribution = Array.from(typeMap.entries())
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Monthly compliance trend (last 6 months)
-    const complianceTrend: { month: string; rate: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = new Date();
-      monthDate.setMonth(monthDate.getMonth() - i);
-      const year = monthDate.getFullYear();
-      const month = monthDate.getMonth();
-      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-      const licensesByMonthEnd = licenses.filter((l) => new Date(l.createdAt) <= monthEnd);
-      const totalByMonthEnd = licensesByMonthEnd.length;
-
-      if (totalByMonthEnd === 0) {
-        const monthLabel = monthDate.toLocaleString('en-US', { month: 'short' });
-        complianceTrend.push({ month: monthLabel, rate: 100 });
-      } else {
-        const notExpiredByMonthEnd = licensesByMonthEnd.filter((l) => l.expirationDate > monthEnd).length;
-        const rate = Math.round((notExpiredByMonthEnd / totalByMonthEnd) * 100);
-        const monthLabel = monthDate.toLocaleString('en-US', { month: 'short' });
-        complianceTrend.push({ month: monthLabel, rate });
-      }
-    }
-
-    // License status distribution for pie/donut chart
-    const statusDistribution = [
-      { name: 'active', value: active, color: '#10b981' },
-      { name: 'expiring', value: expiringSoon, color: '#f59e0b' },
-      { name: 'expired', value: expired, color: '#ef4444' },
-    ];
-
-    // Insurance & bond summary
-    const insuranceBonds = await db.insuranceBond.findMany({
-      where: { orgId },
-    });
-
-    const activeInsurance = insuranceBonds.filter(
-      (ib) => ib.status === 'active' && ib.type === 'insurance'
-    );
-    const activeBonds = insuranceBonds.filter(
-      (ib) => ib.status === 'active' && ib.type === 'bond'
-    );
-    const totalCoverage = insuranceBonds
-      .filter((ib) => ib.status === 'active')
-      .reduce((sum, ib) => sum + ib.coverageAmount, 0);
-    const totalPremium = insuranceBonds
-      .filter((ib) => ib.status === 'active')
-      .reduce((sum, ib) => sum + ib.premiumAmount, 0);
-
-    const insuranceSummary = {
-      totalPolicies: insuranceBonds.filter((ib) => ib.type === 'insurance').length,
-      activePolicies: activeInsurance.length,
-      totalBonds: insuranceBonds.filter((ib) => ib.type === 'bond').length,
-      activeBonds: activeBonds.length,
-      totalCoverage,
-      totalPremium,
-    };
-
-    // Expiring licenses (within 90 days)
-    const expiringLicenses = licenses
-      .filter((l) => l.expirationDate >= now && l.expirationDate <= ninetyDaysFromNow)
-      .sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime())
-      .slice(0, 10)
-      .map((l) => ({
-        id: l.id,
-        name: l.name,
-        type: l.type,
-        expirationDate: l.expirationDate.toISOString(),
-        daysLeft: Math.ceil((new Date(l.expirationDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-      }));
-
-    return NextResponse.json({
-      summary: {
-        total,
-        active,
-        expiringSoon,
-        expired,
-        complianceScore,
-      },
-      licenseDistribution,
-      complianceTrend,
-      statusDistribution,
-      insuranceSummary,
+    const [
+      total,
+      active,
+      expiringSoon,
+      expired,
+      typeGroups,
+      insuranceRecords,
       expiringLicenses,
+    ] = await Promise.all([
+      db.license.count({ where: { orgId: context.orgId } }),
+      db.license.count({
+        where: {
+          orgId: context.orgId,
+          expirationDate: { gt: thirtyDaysFromNow },
+        },
+      }),
+      db.license.count({
+        where: {
+          orgId: context.orgId,
+          expirationDate: { gte: now, lte: thirtyDaysFromNow },
+        },
+      }),
+      db.license.count({
+        where: { orgId: context.orgId, expirationDate: { lt: now } },
+      }),
+      db.license.groupBy({
+        by: ["type"],
+        where: { orgId: context.orgId },
+        _count: { _all: true },
+        orderBy: { _count: { type: "desc" } },
+      }),
+      db.insuranceBond.findMany({
+        where: { orgId: context.orgId },
+        select: {
+          type: true,
+          coverageAmount: true,
+          premiumAmount: true,
+          expirationDate: true,
+          complianceStatus: true,
+        },
+      }),
+      db.license.findMany({
+        where: {
+          orgId: context.orgId,
+          expirationDate: { gte: now, lte: ninetyDaysFromNow },
+        },
+        orderBy: { expirationDate: "asc" },
+        take: 10,
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          expirationDate: true,
+        },
+      }),
+    ]);
+
+    const locale = getLocale(request);
+    const trendDates = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const monthEnd = new Date(
+        date.getFullYear(),
+        date.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
+      return { date, monthEnd };
     });
+    const trendCounts = await Promise.all(
+      trendDates.flatMap(({ monthEnd }) => [
+        db.license.count({
+          where: { orgId: context.orgId, createdAt: { lte: monthEnd } },
+        }),
+        db.license.count({
+          where: {
+            orgId: context.orgId,
+            createdAt: { lte: monthEnd },
+            expirationDate: { gt: monthEnd },
+          },
+        }),
+      ]),
+    );
+    const complianceTrend = trendDates.map(({ date }, index) => {
+      const monthTotal = trendCounts[index * 2] || 0;
+      const compliant = trendCounts[index * 2 + 1] || 0;
+      return {
+        month: date.toLocaleString(locale, { month: "short" }),
+        rate:
+          monthTotal > 0 ? Math.round((compliant / monthTotal) * 100) : 100,
+      };
+    });
+
+    const activeInsuranceRecords = insuranceRecords.filter(
+      (record) => record.expirationDate > now,
+    );
+    const complianceScore =
+      total > 0 ? Math.round(((total - expired) / total) * 100) : 100;
+
+    return NextResponse.json(
+      {
+        summary: {
+          total,
+          active,
+          expiringSoon,
+          expired,
+          complianceScore,
+        },
+        licenseDistribution: typeGroups.map((group) => ({
+          type: group.type || "Other",
+          count: group._count._all,
+        })),
+        complianceTrend,
+        statusDistribution: [
+          { name: "active", value: active },
+          { name: "expiring", value: expiringSoon },
+          { name: "expired", value: expired },
+        ],
+        insuranceSummary: {
+          totalPolicies: insuranceRecords.filter(
+            (record) => record.type === "insurance",
+          ).length,
+          activePolicies: activeInsuranceRecords.filter(
+            (record) => record.type === "insurance",
+          ).length,
+          totalBonds: insuranceRecords.filter((record) => record.type === "bond")
+            .length,
+          activeBonds: activeInsuranceRecords.filter(
+            (record) => record.type === "bond",
+          ).length,
+          totalCoverage: activeInsuranceRecords.reduce(
+            (sum, record) => sum + record.coverageAmount,
+            0,
+          ),
+          totalPremium: activeInsuranceRecords.reduce(
+            (sum, record) => sum + record.premiumAmount,
+            0,
+          ),
+          compliant: insuranceRecords.filter(
+            (record) => record.complianceStatus === "compliant",
+          ).length,
+          needsAction: insuranceRecords.filter(
+            (record) => record.complianceStatus !== "compliant",
+          ).length,
+        },
+        expiringLicenses: expiringLicenses.map((license) => ({
+          ...license,
+          expirationDate: license.expirationDate.toISOString(),
+          daysLeft: Math.ceil(
+            (license.expirationDate.getTime() - now.getTime()) / 86_400_000,
+          ),
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Reports API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Reports API error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

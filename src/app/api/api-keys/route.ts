@@ -1,35 +1,28 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-import crypto from 'crypto';
+import crypto from "node:crypto";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
 
-// GET: List API keys for the org
+const createApiKeySchema = z.object({
+  name: z.string().trim().min(1, "Key name is required").max(100),
+  permissions: z.enum(["read", "write", "admin"]).default("read"),
+  expiresAt: z.coerce.date().optional(),
+});
+
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
     const apiKeys = await db.apiKey.findMany({
-      where: { orgId: orgMember.orgId },
-      orderBy: { createdAt: 'desc' },
+      where: { orgId: context.orgId },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
@@ -42,84 +35,69 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ apiKeys });
+    return NextResponse.json(
+      { apiKeys },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get API keys error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get API keys error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const createApiKeySchema = z.object({
-  name: z.string().min(1, 'Key name is required'),
-  permissions: z.enum(['read', 'write', 'admin']).default('read'),
-  expiresAt: z.string().optional(),
-});
-
-// POST: Create an API key
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const userId = (session.user as any).id;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const result = createApiKeySchema.safeParse(body);
-
+    const result = createApiKeySchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: result.error.issues[0]?.message || "Validation failed" },
+        { status: 400 },
+      );
+    }
+    if (result.data.expiresAt && result.data.expiresAt <= new Date()) {
+      return NextResponse.json(
+        { error: "Expiration date must be in the future" },
+        { status: 400 },
       );
     }
 
-    const { name, permissions, expiresAt } = result.data;
+    const rawKey = `lv_live_${crypto.randomBytes(32).toString("hex")}`;
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+    const keyPrefix = rawKey.substring(0, 12);
 
-    // Generate API key
-    const rawKey = `lv_live_${crypto.randomBytes(32).toString('hex')}`;
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    const keyPrefix = rawKey.substring(0, 8);
-
-    const apiKey = await db.apiKey.create({
-      data: {
-        orgId: orgMember.orgId,
-        name,
-        keyHash,
-        keyPrefix,
-        permissions,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-      },
+    const apiKey = await db.$transaction(async (transaction) => {
+      const created = await transaction.apiKey.create({
+        data: {
+          orgId: context.orgId,
+          name: result.data.name,
+          keyHash,
+          keyPrefix,
+          permissions: result.data.permissions,
+          expiresAt: result.data.expiresAt || null,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "create",
+          entityType: "apiKey",
+          entityId: created.id,
+          entityName: created.name,
+          details: `Created API key: ${created.name}`,
+        },
+      });
+      return created;
     });
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'create',
-        entityType: 'apiKey',
-        entityId: apiKey.id,
-        entityName: name,
-        details: `Created API key: ${name}`,
-      },
-    });
-
-    // Return the full key only once
     return NextResponse.json(
       {
         apiKey: {
@@ -131,12 +109,12 @@ export async function POST(request: Request) {
           isActive: apiKey.isActive,
           createdAt: apiKey.createdAt,
         },
-        key: rawKey, // Full key - shown only once
+        key: rawKey,
       },
-      { status: 201 }
+      { status: 201, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    console.error('Create API key error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Create API key error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

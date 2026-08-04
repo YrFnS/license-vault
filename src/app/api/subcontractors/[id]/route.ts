@@ -1,264 +1,356 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-import crypto from 'crypto';
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  computeSubcontractorCompliance,
+  computeSubcontractorInsuranceStatus,
+  refreshSubcontractorProjects,
+} from "@/lib/subcontractor-compliance";
+import { refreshProjectCompliance } from "@/lib/project-compliance";
 
-function computeComplianceStatus(licenseExpiry: Date | null, insuranceExpiry: Date | null): string {
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+const SUBCONTRACTOR_STATUSES = ["active", "inactive", "suspended"] as const;
 
-  const licenseExpired = licenseExpiry ? licenseExpiry < now : true;
-  const licenseExpiring = licenseExpiry ? licenseExpiry <= thirtyDaysFromNow : true;
-  const insuranceExpired = insuranceExpiry ? insuranceExpiry < now : true;
-  const insuranceExpiring = insuranceExpiry ? insuranceExpiry <= thirtyDaysFromNow : true;
-
-  if ((licenseExpiry && !licenseExpired && !licenseExpiring) && (insuranceExpiry && !insuranceExpired && !insuranceExpiring)) {
-    return 'compliant';
-  }
-  if (licenseExpired || insuranceExpired) {
-    return 'non_compliant';
-  }
-  return 'pending';
+function validDate(value: string): boolean {
+  return Number.isFinite(new Date(value).getTime());
 }
 
-function computeInsuranceStatus(insuranceExpiry: Date | null): string {
-  if (!insuranceExpiry) return 'unknown';
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-  if (insuranceExpiry < now) return 'expired';
-  if (insuranceExpiry <= thirtyDaysFromNow) return 'expiring';
-  return 'active';
+function stripPortalSecrets<T extends {
+  uploadToken: string | null;
+  portalToken: string | null;
+}>(record: T): Omit<T, "uploadToken" | "portalToken"> {
+  const { uploadToken: _uploadToken, portalToken: _portalToken, ...safe } = record;
+  return safe;
 }
 
-const updateSubcontractorSchema = z.object({
-  companyName: z.string().min(1, 'Company name is required').optional(),
-  contactName: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().optional(),
-  licenseNumber: z.string().optional(),
-  licenseState: z.string().optional(),
-  licenseExpiry: z.string().optional(),
-  insuranceExpiry: z.string().optional(),
-  insuranceStatus: z.string().optional(),
-  status: z.string().optional(),
-  notes: z.string().optional(),
-});
+async function findSubcontractor(id: string, orgId: string) {
+  return db.subcontractor.findFirst({ where: { id, orgId } });
+}
 
-// GET: Get single subcontractor
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const subcontractor = await db.subcontractor.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId },
       include: {
         projectSubs: {
           include: {
-            project: {
-              select: { id: true, name: true, status: true },
-            },
+            project: { select: { id: true, name: true, status: true } },
+          },
+        },
+        documents: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            fileName: true,
+            fileType: true,
+            fileSize: true,
+            category: true,
+            reviewStatus: true,
+            reviewedBy: true,
+            reviewedAt: true,
+            reviewNotes: true,
+            createdAt: true,
           },
         },
       },
     });
-
     if (!subcontractor) {
-      return NextResponse.json({ error: 'Subcontractor not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Subcontractor not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({
-      subcontractor: {
-        ...subcontractor,
-        computedInsuranceStatus: computeInsuranceStatus(subcontractor.insuranceExpiry),
+    return NextResponse.json(
+      {
+        subcontractor: {
+          ...stripPortalSecrets(subcontractor),
+          computedInsuranceStatus: computeSubcontractorInsuranceStatus(
+            subcontractor.insuranceExpiry,
+          ),
+          computedComplianceStatus: computeSubcontractorCompliance({
+            licenseExpiry: subcontractor.licenseExpiry,
+            insuranceExpiry: subcontractor.insuranceExpiry,
+            status: subcontractor.status,
+          }),
+          portalEnabled: Boolean(
+            subcontractor.portalExpiresAt &&
+              subcontractor.portalExpiresAt > new Date(),
+          ),
+        },
       },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get subcontractor error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get subcontractor error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// PUT: Update a subcontractor
+const updateSubcontractorSchema = z
+  .object({
+    companyName: z.string().trim().min(1).max(200).optional(),
+    contactName: z.string().trim().max(200).nullable().optional(),
+    email: z
+      .string()
+      .trim()
+      .email()
+      .max(320)
+      .or(z.literal(""))
+      .nullable()
+      .optional(),
+    phone: z.string().trim().max(100).nullable().optional(),
+    licenseNumber: z.string().trim().max(150).nullable().optional(),
+    licenseState: z.string().trim().max(100).nullable().optional(),
+    licenseExpiry: z
+      .string()
+      .refine(validDate, "License expiry is invalid")
+      .nullable()
+      .optional(),
+    insuranceExpiry: z
+      .string()
+      .refine(validDate, "Insurance expiry is invalid")
+      .nullable()
+      .optional(),
+    status: z.enum(SUBCONTRACTOR_STATUSES).optional(),
+    notes: z.string().trim().max(5_000).nullable().optional(),
+    tradeType: z.string().trim().max(150).nullable().optional(),
+    insuranceProvider: z.string().trim().max(200).nullable().optional(),
+    insuranceAmount: z.number().finite().min(0).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "No changes supplied");
+
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can update subcontractors." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role as string)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
-      );
-    }
-
-    const existing = await db.subcontractor.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
+    const existing = await findSubcontractor(id, context.orgId);
     if (!existing) {
-      return NextResponse.json({ error: 'Subcontractor not found' }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const result = updateSubcontractorSchema.safeParse(body);
-
-    if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        { error: "Subcontractor not found" },
+        { status: 404 },
       );
     }
 
-    const data = result.data;
-    const licenseExpiry = data.licenseExpiry !== undefined
-      ? (data.licenseExpiry ? new Date(data.licenseExpiry) : null)
-      : existing.licenseExpiry;
-    const insuranceExpiry = data.insuranceExpiry !== undefined
-      ? (data.insuranceExpiry ? new Date(data.insuranceExpiry) : null)
-      : existing.insuranceExpiry;
+    const result = updateSubcontractorSchema.safeParse(await request.json());
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
 
-    // Recalculate compliance status
-    const complianceStatus = computeComplianceStatus(licenseExpiry, insuranceExpiry);
-    const computedInsuranceStatus = computeInsuranceStatus(insuranceExpiry);
+    const value = result.data;
+    const licenseNumber =
+      value.licenseNumber === undefined
+        ? existing.licenseNumber
+        : value.licenseNumber
+          ? sanitizeString(value.licenseNumber)
+          : null;
+    if (value.licenseNumber && licenseNumber) {
+      const duplicate = await db.subcontractor.findFirst({
+        where: {
+          id: { not: existing.id },
+          orgId: context.orgId,
+          licenseNumber: { equals: licenseNumber, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        return NextResponse.json(
+          { error: "A subcontractor with this license number already exists." },
+          { status: 409 },
+        );
+      }
+    }
 
-    const subcontractor = await db.subcontractor.update({
-      where: { id },
-      data: {
-        companyName: data.companyName,
-        contactName: data.contactName !== undefined ? (data.contactName || null) : undefined,
-        email: data.email !== undefined ? (data.email || null) : undefined,
-        phone: data.phone !== undefined ? (data.phone || null) : undefined,
-        licenseNumber: data.licenseNumber !== undefined ? (data.licenseNumber || null) : undefined,
-        licenseState: data.licenseState !== undefined ? (data.licenseState || null) : undefined,
-        licenseExpiry,
-        insuranceExpiry,
-        insuranceStatus: data.insuranceStatus || computedInsuranceStatus,
-        complianceStatus,
-        status: data.status,
-        notes: data.notes !== undefined ? (data.notes || null) : undefined,
-      },
+    const licenseExpiry =
+      value.licenseExpiry === undefined
+        ? existing.licenseExpiry
+        : value.licenseExpiry
+          ? new Date(value.licenseExpiry)
+          : null;
+    const insuranceExpiry =
+      value.insuranceExpiry === undefined
+        ? existing.insuranceExpiry
+        : value.insuranceExpiry
+          ? new Date(value.insuranceExpiry)
+          : null;
+    const status = value.status ?? existing.status;
+    const complianceStatus = computeSubcontractorCompliance({
+      licenseExpiry,
+      insuranceExpiry,
+      status,
+    });
+    const insuranceStatus = computeSubcontractorInsuranceStatus(insuranceExpiry);
+
+    const updateData: Prisma.SubcontractorUncheckedUpdateInput = {
+      ...(value.companyName !== undefined
+        ? { companyName: sanitizeString(value.companyName) }
+        : {}),
+      ...(value.contactName !== undefined
+        ? {
+            contactName: value.contactName
+              ? sanitizeString(value.contactName)
+              : null,
+          }
+        : {}),
+      ...(value.email !== undefined
+        ? { email: value.email?.toLowerCase() || null }
+        : {}),
+      ...(value.phone !== undefined
+        ? { phone: value.phone ? sanitizeString(value.phone) : null }
+        : {}),
+      ...(value.licenseNumber !== undefined ? { licenseNumber } : {}),
+      ...(value.licenseState !== undefined
+        ? {
+            licenseState: value.licenseState
+              ? sanitizeString(value.licenseState)
+              : null,
+          }
+        : {}),
+      ...(value.licenseExpiry !== undefined ? { licenseExpiry } : {}),
+      ...(value.insuranceExpiry !== undefined ? { insuranceExpiry } : {}),
+      ...(value.status !== undefined ? { status } : {}),
+      ...(value.notes !== undefined
+        ? { notes: value.notes ? sanitizeString(value.notes) : null }
+        : {}),
+      ...(value.tradeType !== undefined
+        ? { tradeType: value.tradeType ? sanitizeString(value.tradeType) : null }
+        : {}),
+      ...(value.insuranceProvider !== undefined
+        ? {
+            insuranceProvider: value.insuranceProvider
+              ? sanitizeString(value.insuranceProvider)
+              : null,
+          }
+        : {}),
+      ...(value.insuranceAmount !== undefined
+        ? { insuranceAmount: value.insuranceAmount }
+        : {}),
+      insuranceStatus,
+      complianceStatus,
+    };
+
+    const subcontractor = await db.$transaction(async (transaction) => {
+      const updated = await transaction.subcontractor.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+      await transaction.projectSubcontractor.updateMany({
+        where: { subcontractorId: existing.id },
+        data: { complianceStatus, lastChecked: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "update",
+          entityType: "subcontractor",
+          entityId: updated.id,
+          entityName: updated.companyName,
+          details: JSON.stringify({
+            updatedFields: Object.keys(value),
+            complianceStatus,
+          }),
+        },
+      });
+      return updated;
     });
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'update',
-        entityType: 'subcontractor',
-        entityId: subcontractor.id,
-        entityName: subcontractor.companyName,
-        details: `Updated subcontractor: ${subcontractor.companyName}`,
-      },
-    });
-
+    await refreshSubcontractorProjects(existing.id, context.orgId);
     return NextResponse.json({
       subcontractor: {
-        ...subcontractor,
-        computedInsuranceStatus: computeInsuranceStatus(subcontractor.insuranceExpiry),
+        ...stripPortalSecrets(subcontractor),
+        computedInsuranceStatus: insuranceStatus,
+        computedComplianceStatus: complianceStatus,
       },
     });
   } catch (error) {
-    console.error('Update subcontractor error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Update subcontractor error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// DELETE: Delete a subcontractor
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role as string)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
+        { error: "Only organization owners and admins can delete subcontractors." },
+        { status: 403 },
       );
     }
 
+    const { id } = await params;
     const existing = await db.subcontractor.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId },
+      include: { projectSubs: { select: { projectId: true } } },
     });
-
     if (!existing) {
-      return NextResponse.json({ error: 'Subcontractor not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Subcontractor not found" },
+        { status: 404 },
+      );
     }
 
-    await db.subcontractor.delete({
-      where: { id },
+    const projectIds = existing.projectSubs.map((link) => link.projectId);
+    await db.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "delete",
+          entityType: "subcontractor",
+          entityId: existing.id,
+          entityName: existing.companyName,
+          details: JSON.stringify({ linkedProjects: projectIds.length }),
+        },
+      });
+      await transaction.subcontractor.delete({ where: { id: existing.id } });
     });
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'delete',
-        entityType: 'subcontractor',
-        entityId: id,
-        entityName: existing.companyName,
-        details: `Deleted subcontractor: ${existing.companyName}`,
-      },
-    });
-
+    await Promise.all(
+      projectIds.map((projectId) =>
+        refreshProjectCompliance(projectId, context.orgId),
+      ),
+    );
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete subcontractor error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Delete subcontractor error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

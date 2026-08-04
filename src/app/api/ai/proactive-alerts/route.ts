@@ -1,25 +1,21 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { generateProactiveAlerts } from '@/lib/ai-proactive-alerts';
+import { NextResponse } from "next/server";
+import { getOrgContext } from "@/lib/org-context";
+import { generateOrganizationComplianceAlerts } from "@/lib/compliance-alerts";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as Record<string, unknown>).id as string;
-
-    const alerts = await generateProactiveAlerts(userId);
-
-    return NextResponse.json({ alerts });
-  } catch (error) {
-    console.error('Proactive alerts error:', error);
+    const alerts = await generateOrganizationComplianceAlerts(context.orgId);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { alerts },
+      { headers: { "Cache-Control": "no-store" } },
     );
+  } catch (error) {
+    console.error("Proactive alerts error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

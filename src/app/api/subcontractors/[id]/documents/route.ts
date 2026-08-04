@@ -1,272 +1,401 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { mkdir, unlink, writeFile } from "fs/promises";
+import path from "path";
+import crypto from "crypto";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import {
+  computeSubcontractorCompliance,
+  refreshSubcontractorProjects,
+} from "@/lib/subcontractor-compliance";
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+export const runtime = "nodejs";
 
-const ALLOWED_MIME_TYPES: Record<string, string[]> = {
-  'application/pdf': ['pdf'],
-  'image/jpeg': ['jpg', 'jpeg'],
-  'image/png': ['png'],
-  'application/msword': ['doc'],
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+const FILE_DEFINITIONS: Record<
+  string,
+  { mimeTypes: string[]; matches: (buffer: Buffer) => boolean }
+> = {
+  pdf: {
+    mimeTypes: ["application/pdf"],
+    matches: (buffer) => buffer.subarray(0, 5).toString("ascii") === "%PDF-",
+  },
+  jpg: {
+    mimeTypes: ["image/jpeg"],
+    matches: (buffer) =>
+      buffer.length >= 3 &&
+      buffer[0] === 0xff &&
+      buffer[1] === 0xd8 &&
+      buffer[2] === 0xff,
+  },
+  jpeg: {
+    mimeTypes: ["image/jpeg"],
+    matches: (buffer) =>
+      buffer.length >= 3 &&
+      buffer[0] === 0xff &&
+      buffer[1] === 0xd8 &&
+      buffer[2] === 0xff,
+  },
+  png: {
+    mimeTypes: ["image/png"],
+    matches: (buffer) =>
+      buffer.subarray(0, 8).equals(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      ),
+  },
+  doc: {
+    mimeTypes: ["application/msword", "application/x-ole-storage"],
+    matches: (buffer) =>
+      buffer.subarray(0, 8).equals(
+        Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+      ),
+  },
+  docx: {
+    mimeTypes: [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/zip",
+    ],
+    matches: (buffer) =>
+      buffer.length >= 4 &&
+      buffer[0] === 0x50 &&
+      buffer[1] === 0x4b &&
+      [0x03, 0x05, 0x07].includes(buffer[2] ?? -1) &&
+      [0x04, 0x06, 0x08].includes(buffer[3] ?? -1),
+  },
 };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const categorySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid document category");
 
-// POST: Upload a document for a subcontractor
+function getSafeOriginalName(fileName: string): string {
+  const base = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
+  return base.slice(0, 180) || "document";
+}
+
+function getPortalToken(request: Request): string | null {
+  const headerToken = request.headers.get("x-portal-token")?.trim();
+  if (headerToken) return headerToken;
+
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+  try {
+    const url = new URL(referer);
+    const match = url.pathname.match(/\/subcontractor-portal\/([^/]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function authorizeUpload(request: Request, subcontractorId: string) {
+  const context = await getOrgContext();
+  if (context && canManageOrganization(context.role)) {
+    const subcontractor = await db.subcontractor.findFirst({
+      where: { id: subcontractorId, orgId: context.orgId },
+      select: { id: true, companyName: true, orgId: true },
+    });
+    if (subcontractor) {
+      return {
+        subcontractor,
+        userId: context.userId as string | null,
+        source: "team" as const,
+      };
+    }
+  }
+
+  const portalToken = getPortalToken(request);
+  if (!portalToken) return null;
+  const subcontractor = await db.subcontractor.findFirst({
+    where: {
+      id: subcontractorId,
+      portalToken,
+      portalExpiresAt: { gt: new Date() },
+      status: "active",
+    },
+    select: { id: true, companyName: true, orgId: true },
+  });
+  if (!subcontractor) return null;
+  return {
+    subcontractor,
+    userId: null,
+    source: "portal" as const,
+  };
+}
+
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  let savedPath: string | null = null;
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    const subcontractor = await db.subcontractor.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
-    if (!subcontractor) {
-      return NextResponse.json({ error: 'Subcontractor not found' }, { status: 404 });
+    const authorization = await authorizeUpload(request, id);
+    if (!authorization) {
+      return NextResponse.json(
+        { error: "Document upload authorization is invalid or expired." },
+        { status: 401 },
+      );
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const category = (formData.get('category') as string) || 'other';
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    const fileValue = formData.get("file");
+    if (!(fileValue instanceof File)) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-
-    // Validate file type
-    const allowedExtensions = Object.values(ALLOWED_MIME_TYPES).flat();
-    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-
-    if (!ALLOWED_MIME_TYPES[file.type] && !allowedExtensions.includes(fileExtension)) {
+    if (fileValue.size <= 0 || fileValue.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: 'Invalid file type. Allowed types: PDF, JPG, PNG, DOC, DOCX' },
-        { status: 400 }
+        { error: "File must be between 1 byte and 10MB." },
+        { status: 400 },
       );
     }
 
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
+    const categoryResult = categorySchema.safeParse(
+      formData.get("category") || "other",
+    );
+    if (!categoryResult.success) {
       return NextResponse.json(
-        { error: 'File size exceeds 10MB limit' },
-        { status: 400 }
+        { error: categoryResult.error.issues[0]?.message || "Invalid category" },
+        { status: 400 },
       );
     }
 
-    // Ensure uploads directory exists
-    await mkdir(UPLOADS_DIR, { recursive: true });
+    const safeOriginalName = getSafeOriginalName(fileValue.name);
+    const extension = safeOriginalName.split(".").pop()?.toLowerCase() || "";
+    const definition = FILE_DEFINITIONS[extension];
+    if (!definition || !definition.mimeTypes.includes(fileValue.type)) {
+      return NextResponse.json(
+        { error: "Invalid file type. Allowed types: PDF, JPG, PNG, DOC, DOCX." },
+        { status: 400 },
+      );
+    }
 
-    // Generate unique filename
-    const randomBytes = crypto.randomBytes(16).toString('hex');
-    const safeFileName = `${randomBytes}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const filePath = path.join(UPLOADS_DIR, safeFileName);
+    const buffer = Buffer.from(await fileValue.arrayBuffer());
+    if (!definition.matches(buffer)) {
+      return NextResponse.json(
+        { error: "The file content does not match its declared type." },
+        { status: 400 },
+      );
+    }
 
-    // Write file to disk
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    await writeFile(filePath, buffer);
+    const relativeDirectory = path.join(
+      "subcontractors",
+      authorization.subcontractor.orgId,
+      authorization.subcontractor.id,
+    );
+    const absoluteDirectory = path.join(process.cwd(), "uploads", relativeDirectory);
+    await mkdir(absoluteDirectory, { recursive: true });
 
-    // Get user name
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
+    const storedName = `${crypto.randomUUID()}.${extension}`;
+    savedPath = path.join(absoluteDirectory, storedName);
+    await writeFile(savedPath, buffer, { flag: "wx" });
+    const relativePath = path.join(relativeDirectory, storedName).replace(/\\/g, "/");
+
+    const document = await db.$transaction(async (transaction) => {
+      const created = await transaction.subcontractorDocument.create({
+        data: {
+          subcontractorId: authorization.subcontractor.id,
+          orgId: authorization.subcontractor.orgId,
+          fileName: safeOriginalName,
+          fileType: extension,
+          fileSize: fileValue.size,
+          filePath: relativePath,
+          category: categoryResult.data,
+          reviewStatus: "pending",
+        },
+      });
+      await transaction.subcontractor.update({
+        where: { id: authorization.subcontractor.id },
+        data: { lastSubmittedAt: new Date(), complianceStatus: "pending" },
+      });
+      await transaction.projectSubcontractor.updateMany({
+        where: { subcontractorId: authorization.subcontractor.id },
+        data: { complianceStatus: "pending", lastChecked: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: authorization.subcontractor.orgId,
+          userId: authorization.userId,
+          action: "document_uploaded",
+          entityType: "subcontractor_document",
+          entityId: created.id,
+          entityName: safeOriginalName,
+          details: JSON.stringify({
+            subcontractorId: authorization.subcontractor.id,
+            companyName: authorization.subcontractor.companyName,
+            category: created.category,
+            fileSize: created.fileSize,
+            source: authorization.source,
+          }),
+        },
+      });
+      return created;
     });
 
-    // Create document record
-    const document = await db.subcontractorDocument.create({
-      data: {
-        subcontractorId: id,
-        orgId: orgMember.orgId,
-        fileName: file.name,
-        fileType: fileExtension,
-        fileSize: file.size,
-        filePath: safeFileName,
-        category,
-        reviewStatus: 'pending',
+    await refreshSubcontractorProjects(
+      authorization.subcontractor.id,
+      authorization.subcontractor.orgId,
+    );
+    return NextResponse.json(
+      {
+        document: {
+          id: document.id,
+          fileName: document.fileName,
+          fileType: document.fileType,
+          fileSize: document.fileSize,
+          category: document.category,
+          reviewStatus: document.reviewStatus,
+          createdAt: document.createdAt.toISOString(),
+        },
       },
-    });
-
-    // Update lastSubmittedAt
-    await db.subcontractor.update({
-      where: { id },
-      data: { lastSubmittedAt: new Date() },
-    });
-
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'DOCUMENT_UPLOADED',
-        entityType: 'subcontractor_document',
-        entityId: document.id,
-        entityName: file.name,
-        details: `Uploaded document "${file.name}" for subcontractor "${subcontractor.companyName}"`,
-      },
-    });
-
-    return NextResponse.json({
-      document: {
-        id: document.id,
-        fileName: document.fileName,
-        fileType: document.fileType,
-        fileSize: document.fileSize,
-        category: document.category,
-        reviewStatus: document.reviewStatus,
-        createdAt: document.createdAt.toISOString(),
-      },
-    }, { status: 201 });
+      { status: 201 },
+    );
   } catch (error) {
-    console.error('Upload subcontractor document error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    if (savedPath) await unlink(savedPath).catch(() => undefined);
+    console.error("Upload subcontractor document error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 const reviewDocumentSchema = z.object({
-  documentId: z.string().min(1, 'Document ID is required'),
-  reviewStatus: z.enum(['approved', 'rejected']),
-  reviewNotes: z.string().optional(),
+  documentId: z.string().trim().min(1).max(200),
+  reviewStatus: z.enum(["approved", "rejected"]),
+  reviewNotes: z.string().trim().max(2_000).optional(),
 });
 
-// PUT: Review a document
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can review documents." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role as string)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const result = reviewDocumentSchema.safeParse(body);
-
+    const result = reviewDocumentSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
       );
     }
 
-    const { documentId, reviewStatus, reviewNotes } = result.data;
-
-    // Verify document belongs to this subcontractor
-    const document = await db.subcontractorDocument.findFirst({
-      where: { id: documentId, subcontractorId: id },
-    });
-
-    if (!document) {
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    const [subcontractor, document, reviewer] = await Promise.all([
+      db.subcontractor.findFirst({
+        where: { id, orgId: context.orgId },
+      }),
+      db.subcontractorDocument.findFirst({
+        where: {
+          id: result.data.documentId,
+          subcontractorId: id,
+          orgId: context.orgId,
+        },
+      }),
+      db.user.findUnique({
+        where: { id: context.userId },
+        select: { name: true },
+      }),
+    ]);
+    if (!subcontractor || !document) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // Get reviewer name
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-
-    const updated = await db.subcontractorDocument.update({
-      where: { id: documentId },
-      data: {
-        reviewStatus,
-        reviewedBy: user?.name || null,
-        reviewedAt: new Date(),
-        reviewNotes: reviewNotes || null,
-      },
-    });
-
-    // Check if all documents are approved - update compliance status
-    const allDocs = await db.subcontractorDocument.findMany({
-      where: { subcontractorId: id },
-    });
-
-    const allApproved = allDocs.length > 0 && allDocs.every((d) => d.reviewStatus === 'approved');
-    const anyRejected = allDocs.some((d) => d.reviewStatus === 'rejected');
-
-    if (allApproved) {
-      await db.subcontractor.update({
-        where: { id },
-        data: { complianceStatus: 'compliant' },
+    const output = await db.$transaction(async (transaction) => {
+      const updated = await transaction.subcontractorDocument.update({
+        where: { id: document.id },
+        data: {
+          reviewStatus: result.data.reviewStatus,
+          reviewedBy: reviewer?.name || context.email,
+          reviewedAt: new Date(),
+          reviewNotes: result.data.reviewNotes
+            ? sanitizeString(result.data.reviewNotes)
+            : null,
+        },
       });
-    } else if (anyRejected) {
-      await db.subcontractor.update({
-        where: { id },
-        data: { complianceStatus: 'non_compliant' },
-      });
-    }
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'DOCUMENT_REVIEWED',
-        entityType: 'subcontractor_document',
-        entityId: documentId,
-        entityName: document.fileName,
-        details: `Reviewed document "${document.fileName}" for subcontractor: ${reviewStatus}`,
-      },
+      const allDocuments = await transaction.subcontractorDocument.findMany({
+        where: { subcontractorId: subcontractor.id, orgId: context.orgId },
+        select: { reviewStatus: true },
+      });
+      const anyRejected = allDocuments.some(
+        (item) => item.reviewStatus === "rejected",
+      );
+      const allApproved =
+        allDocuments.length > 0 &&
+        allDocuments.every((item) => item.reviewStatus === "approved");
+      const baseCompliance = computeSubcontractorCompliance({
+        licenseExpiry: subcontractor.licenseExpiry,
+        insuranceExpiry: subcontractor.insuranceExpiry,
+        status: subcontractor.status,
+      });
+      const complianceStatus = anyRejected
+        ? "non_compliant"
+        : allApproved
+          ? baseCompliance
+          : "pending";
+
+      await transaction.subcontractor.update({
+        where: { id: subcontractor.id },
+        data: { complianceStatus },
+      });
+      await transaction.projectSubcontractor.updateMany({
+        where: { subcontractorId: subcontractor.id },
+        data: { complianceStatus, lastChecked: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "document_reviewed",
+          entityType: "subcontractor_document",
+          entityId: document.id,
+          entityName: document.fileName,
+          details: JSON.stringify({
+            subcontractorId: subcontractor.id,
+            reviewStatus: updated.reviewStatus,
+            complianceStatus,
+          }),
+        },
+      });
+      return { updated, complianceStatus };
     });
 
+    await refreshSubcontractorProjects(subcontractor.id, context.orgId);
     return NextResponse.json({
       document: {
-        id: updated.id,
-        fileName: updated.fileName,
-        fileType: updated.fileType,
-        fileSize: updated.fileSize,
-        category: updated.category,
-        reviewStatus: updated.reviewStatus,
-        reviewedBy: updated.reviewedBy,
-        reviewedAt: updated.reviewedAt?.toISOString(),
-        reviewNotes: updated.reviewNotes,
-        createdAt: updated.createdAt.toISOString(),
+        id: output.updated.id,
+        fileName: output.updated.fileName,
+        fileType: output.updated.fileType,
+        fileSize: output.updated.fileSize,
+        category: output.updated.category,
+        reviewStatus: output.updated.reviewStatus,
+        reviewedBy: output.updated.reviewedBy,
+        reviewedAt: output.updated.reviewedAt?.toISOString(),
+        reviewNotes: output.updated.reviewNotes,
+        createdAt: output.updated.createdAt.toISOString(),
       },
+      complianceStatus: output.complianceStatus,
     });
   } catch (error) {
-    console.error('Review subcontractor document error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Review subcontractor document error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

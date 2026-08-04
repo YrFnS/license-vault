@@ -1,255 +1,270 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { calculateProjectCompliance } from "@/lib/project-compliance";
 
-// Helper to compute compliance score
-async function computeComplianceScore(projectId: string): Promise<number> {
-  const projectLicenses = await db.projectLicense.findMany({
-    where: { projectId },
-    include: {
-      license: { select: { expirationDate: true } },
-    },
-  });
+const PROJECT_STATUSES = ["active", "completed", "on_hold"] as const;
 
-  if (projectLicenses.length === 0) return 100;
-
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-  const compliant = projectLicenses.filter(
-    (pl) => pl.license.expirationDate > thirtyDaysFromNow
-  ).length;
-
-  return Math.round((compliant / projectLicenses.length) * 100);
+function validDate(value: string): boolean {
+  return Number.isFinite(new Date(value).getTime());
 }
 
-// GET: Get single project with full details
+async function findProject(id: string, orgId: string, includeRelations = false) {
+  return db.project.findFirst({
+    where: { id, orgId },
+    ...(includeRelations
+      ? {
+          include: {
+            projectLicenses: {
+              include: { license: true },
+            },
+            projectSubs: {
+              include: { subcontractor: true },
+            },
+          },
+        }
+      : {}),
+  });
+}
+
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
     const project = await db.project.findFirst({
-      where: { id, orgId: orgMember.orgId },
+      where: { id, orgId: context.orgId },
       include: {
-        projectLicenses: {
-          include: {
-            license: true,
-          },
-        },
-        projectSubs: {
-          include: {
-            subcontractor: true,
-          },
-        },
+        projectLicenses: { include: { license: true } },
+        projectSubs: { include: { subcontractor: true } },
       },
     });
-
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Compute compliance score
-    const complianceScore = await computeComplianceScore(id);
-
-    // Update stored score
-    await db.project.update({
-      where: { id },
-      data: { complianceScore },
+    const compliance = calculateProjectCompliance({
+      projectLicenses: project.projectLicenses,
+      projectSubs: project.projectSubs,
     });
 
-    return NextResponse.json({
-      project: {
-        ...project,
-        complianceScore,
+    return NextResponse.json(
+      {
+        project: {
+          ...project,
+          complianceScore: compliance.score,
+          complianceConfigured: compliance.configured,
+          itemsNeedingAction: compliance.itemsNeedingAction,
+          requiredItems: compliance.requiredItems,
+        },
       },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    console.error('Get project error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get project error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-const updateProjectSchema = z.object({
-  name: z.string().min(1, 'Project name is required').optional(),
-  description: z.string().optional(),
-  clientName: z.string().optional(),
-  clientEmail: z.string().optional(),
-  location: z.string().optional(),
-  state: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  status: z.enum(['active', 'completed', 'on_hold']).optional(),
-  requiredLicenses: z.string().optional(),
-  requiredInsurance: z.string().optional(),
-});
+const updateProjectSchema = z
+  .object({
+    name: z.string().trim().min(1, "Project name is required").max(200).optional(),
+    description: z.string().trim().max(5_000).nullable().optional(),
+    clientName: z.string().trim().max(200).nullable().optional(),
+    clientEmail: z
+      .string()
+      .trim()
+      .email()
+      .max(320)
+      .or(z.literal(""))
+      .nullable()
+      .optional(),
+    location: z.string().trim().max(500).nullable().optional(),
+    state: z.string().trim().max(100).nullable().optional(),
+    startDate: z
+      .string()
+      .refine(validDate, "Start date is invalid")
+      .nullable()
+      .optional(),
+    endDate: z
+      .string()
+      .refine(validDate, "End date is invalid")
+      .nullable()
+      .optional(),
+    status: z.enum(PROJECT_STATUSES).optional(),
+    requiredLicenses: z.string().max(20_000).nullable().optional(),
+    requiredInsurance: z.string().max(20_000).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "No changes supplied");
 
-// PUT: Update a project
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can update projects." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can update projects.' },
-        { status: 403 }
-      );
-    }
-
-    const existing = await db.project.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
+    const existing = await findProject(id, context.orgId);
     if (!existing) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const body = await request.json();
-    const result = updateProjectSchema.safeParse(body);
-
+    const result = updateProjectSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
       );
     }
 
-    const data = result.data;
+    const value = result.data;
+    const startDate =
+      value.startDate === undefined
+        ? existing.startDate
+        : value.startDate
+          ? new Date(value.startDate)
+          : null;
+    const endDate =
+      value.endDate === undefined
+        ? existing.endDate
+        : value.endDate
+          ? new Date(value.endDate)
+          : null;
+    if (startDate && endDate && endDate < startDate) {
+      return NextResponse.json(
+        { error: "End date must be on or after the start date." },
+        { status: 400 },
+      );
+    }
 
-    const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.description !== undefined) updateData.description = data.description || null;
-    if (data.clientName !== undefined) updateData.clientName = data.clientName || null;
-    if (data.clientEmail !== undefined) updateData.clientEmail = data.clientEmail || null;
-    if (data.location !== undefined) updateData.location = data.location || null;
-    if (data.state !== undefined) updateData.state = data.state || null;
-    if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : null;
-    if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null;
-    if (data.status !== undefined) updateData.status = data.status;
-    if (data.requiredLicenses !== undefined) updateData.requiredLicenses = data.requiredLicenses || null;
-    if (data.requiredInsurance !== undefined) updateData.requiredInsurance = data.requiredInsurance || null;
+    const updateData: Prisma.ProjectUncheckedUpdateInput = {
+      ...(value.name !== undefined ? { name: sanitizeString(value.name) } : {}),
+      ...(value.description !== undefined
+        ? {
+            description: value.description
+              ? sanitizeString(value.description)
+              : null,
+          }
+        : {}),
+      ...(value.clientName !== undefined
+        ? { clientName: value.clientName ? sanitizeString(value.clientName) : null }
+        : {}),
+      ...(value.clientEmail !== undefined
+        ? { clientEmail: value.clientEmail?.toLowerCase() || null }
+        : {}),
+      ...(value.location !== undefined
+        ? { location: value.location ? sanitizeString(value.location) : null }
+        : {}),
+      ...(value.state !== undefined
+        ? { state: value.state ? sanitizeString(value.state) : null }
+        : {}),
+      ...(value.startDate !== undefined ? { startDate } : {}),
+      ...(value.endDate !== undefined ? { endDate } : {}),
+      ...(value.status !== undefined ? { status: value.status } : {}),
+      ...(value.requiredLicenses !== undefined
+        ? {
+            requiredLicenses: value.requiredLicenses
+              ? sanitizeString(value.requiredLicenses)
+              : null,
+          }
+        : {}),
+      ...(value.requiredInsurance !== undefined
+        ? {
+            requiredInsurance: value.requiredInsurance
+              ? sanitizeString(value.requiredInsurance)
+              : null,
+          }
+        : {}),
+    };
 
-    const project = await db.project.update({
-      where: { id },
-      data: updateData,
-    });
-
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'update',
-        entityType: 'project',
-        entityId: project.id,
-        entityName: project.name,
-        details: `Updated project: ${project.name}`,
-      },
+    const project = await db.$transaction(async (transaction) => {
+      const updated = await transaction.project.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "update",
+          entityType: "project",
+          entityId: updated.id,
+          entityName: updated.name,
+          details: JSON.stringify({ updatedFields: Object.keys(value) }),
+        },
+      });
+      return updated;
     });
 
     return NextResponse.json({ project });
   } catch (error) {
-    console.error('Update project error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Update project error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// DELETE: Delete a project
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userId = (session.user as any).id;
-    const { id } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
+    if (!canManageOrganization(context.role)) {
       return NextResponse.json(
-        { error: 'Insufficient permissions. Only owners and admins can delete projects.' },
-        { status: 403 }
+        { error: "Only organization owners and admins can delete projects." },
+        { status: 403 },
       );
     }
 
-    const existing = await db.project.findFirst({
-      where: { id, orgId: orgMember.orgId },
-    });
-
+    const { id } = await params;
+    const existing = await findProject(id, context.orgId);
     if (!existing) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Delete linked ProjectLicense and ProjectSubcontractor entries
-    await db.projectLicense.deleteMany({ where: { projectId: id } });
-    await db.projectSubcontractor.deleteMany({ where: { projectId: id } });
-
-    // Delete the project
-    await db.project.delete({ where: { id } });
-
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        orgId: orgMember.orgId,
-        userId,
-        action: 'delete',
-        entityType: 'project',
-        entityId: id,
-        entityName: existing.name,
-        details: `Deleted project: ${existing.name}`,
-      },
+    await db.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "delete",
+          entityType: "project",
+          entityId: existing.id,
+          entityName: existing.name,
+          details: JSON.stringify({ status: existing.status }),
+        },
+      });
+      await transaction.project.delete({ where: { id: existing.id } });
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete project error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Delete project error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

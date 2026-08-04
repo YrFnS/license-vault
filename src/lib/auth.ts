@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
 if (!process.env.NEXTAUTH_SECRET) {
-  console.warn('⚠️ NEXTAUTH_SECRET is not set. This is insecure for production.');
+  console.warn("⚠️ NEXTAUTH_SECRET is not set. This is insecure for production.");
 }
 
 export const authOptions: NextAuthOptions = {
@@ -16,51 +16,50 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+        if (!credentials?.email || !credentials?.password) return null;
 
+        const email = credentials.email.trim().toLowerCase();
         const user = await db.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
           include: {
             organizations: {
+              where: { joinedAt: { not: null } },
+              orderBy: [{ joinedAt: "desc" }, { invitedAt: "desc" }],
               take: 1,
-              select: { role: true },
+              select: { orgId: true, role: true },
             },
           },
         });
 
-        if (!user) {
-          return null;
-        }
+        if (!user) return null;
 
-        // Check account lockout
-        if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-          throw new Error('Account temporarily locked due to too many failed login attempts. Please try again later.');
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+          throw new Error(
+            "Account temporarily locked due to too many failed login attempts. Please try again later.",
+          );
         }
 
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          user.password
+          user.password,
         );
 
         if (!isPasswordValid) {
-          // Increment failed login attempts
-          const newFailedAttempts = (user.failedLoginAttempts || 0) + 1;
-          const lockAccount = newFailedAttempts >= 5;
+          const failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+          const shouldLock = failedLoginAttempts >= 5;
 
           await db.user.update({
             where: { id: user.id },
             data: {
-              failedLoginAttempts: newFailedAttempts,
-              ...(lockAccount ? { lockedUntil: new Date(Date.now() + 15 * 60 * 1000) } : {}),
+              failedLoginAttempts,
+              ...(shouldLock
+                ? { lockedUntil: new Date(Date.now() + 15 * 60 * 1000) }
+                : {}),
             },
           });
-
           return null;
         }
 
-        // Reset failed login attempts on successful login
         if (user.failedLoginAttempts > 0 || user.lockedUntil) {
           await db.user.update({
             where: { id: user.id },
@@ -68,11 +67,13 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
+        const membership = user.organizations[0];
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.organizations[0]?.role || "member",
+          role: membership?.role || "member",
+          activeOrgId: membership?.orgId,
         };
       },
     }),
@@ -81,17 +82,44 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role || "member";
+        token.role = (user as { role?: string }).role || "member";
+        token.activeOrgId = (user as { activeOrgId?: string }).activeOrgId;
       }
+
+      if (trigger === "update") {
+        const requestedOrgId = (session as { activeOrgId?: string } | undefined)
+          ?.activeOrgId;
+        const userId = typeof token.id === "string" ? token.id : null;
+
+        if (requestedOrgId && userId) {
+          const membership = await db.orgMember.findFirst({
+            where: {
+              userId,
+              orgId: requestedOrgId,
+              joinedAt: { not: null },
+            },
+            select: { orgId: true, role: true },
+          });
+
+          if (membership) {
+            token.activeOrgId = membership.orgId;
+            token.role = membership.role;
+          }
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role || "member";
+        (session.user as { id?: string }).id = token.id as string;
+        (session.user as { role?: string }).role =
+          typeof token.role === "string" ? token.role : "member";
+        (session.user as { activeOrgId?: string }).activeOrgId =
+          typeof token.activeOrgId === "string" ? token.activeOrgId : undefined;
       }
       return session;
     },

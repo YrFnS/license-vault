@@ -1,123 +1,114 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { z } from 'zod';
-
-// Helper to compute compliance score
-async function computeComplianceScore(projectId: string): Promise<number> {
-  const projectLicenses = await db.projectLicense.findMany({
-    where: { projectId },
-    include: {
-      license: { select: { expirationDate: true } },
-    },
-  });
-
-  if (projectLicenses.length === 0) return 100;
-
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-  const compliant = projectLicenses.filter(
-    (pl) => pl.license.expirationDate > thirtyDaysFromNow
-  ).length;
-
-  return Math.round((compliant / projectLicenses.length) * 100);
-}
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { sanitizeString } from "@/lib/sanitize";
+import { canManageOrganization, getOrgContext } from "@/lib/org-context";
+import { refreshProjectCompliance } from "@/lib/project-compliance";
 
 const linkLicenseSchema = z.object({
-  licenseId: z.string().min(1, 'License ID is required'),
-  required: z.boolean().optional().default(true),
-  notes: z.string().optional(),
+  licenseId: z.string().trim().min(1, "License ID is required").max(200),
+  required: z.boolean().default(true),
+  notes: z.string().trim().max(2_000).optional(),
 });
 
-// POST: Link a license to a project
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = await getOrgContext();
+    if (!context) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canManageOrganization(context.role)) {
+      return NextResponse.json(
+        { error: "Only organization owners and admins can assign project licenses." },
+        { status: 403 },
+      );
     }
 
-    const userId = (session.user as any).id;
     const { id: projectId } = await params;
-
-    const orgMember = await db.orgMember.findFirst({
-      where: { userId },
-    });
-
-    if (!orgMember) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-    }
-
-    if (!['owner', 'admin'].includes(orgMember.role)) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions.' },
-        { status: 403 }
-      );
-    }
-
-    const project = await db.project.findFirst({
-      where: { id: projectId, orgId: orgMember.orgId },
-    });
-
-    if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const result = linkLicenseSchema.safeParse(body);
-
+    const result = linkLicenseSchema.safeParse(await request.json());
     if (!result.success) {
-      const firstError = result.error.issues?.[0];
       return NextResponse.json(
-        { error: firstError?.message || 'Validation failed' },
-        { status: 400 }
+        {
+          error: result.error.issues[0]?.message || "Validation failed",
+          details: result.error.flatten(),
+        },
+        { status: 400 },
       );
     }
 
-    const { licenseId, required, notes } = result.data;
-
-    // Verify license exists and belongs to org
-    const license = await db.license.findFirst({
-      where: { id: licenseId, orgId: orgMember.orgId },
-    });
-
+    const [project, license] = await Promise.all([
+      db.project.findFirst({
+        where: { id: projectId, orgId: context.orgId },
+        select: { id: true, name: true },
+      }),
+      db.license.findFirst({
+        where: { id: result.data.licenseId, orgId: context.orgId },
+        select: { id: true, name: true, licenseNumber: true },
+      }),
+    ]);
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
     if (!license) {
-      return NextResponse.json({ error: 'License not found' }, { status: 404 });
+      return NextResponse.json({ error: "License not found" }, { status: 404 });
     }
 
-    // Check if already linked
     const existing = await db.projectLicense.findUnique({
-      where: { projectId_licenseId: { projectId, licenseId } },
-    });
-
-    if (existing) {
-      return NextResponse.json({ error: 'License already linked to this project' }, { status: 400 });
-    }
-
-    const projectLicense = await db.projectLicense.create({
-      data: {
-        projectId,
-        licenseId,
-        required,
-        notes: notes || null,
+      where: {
+        projectId_licenseId: {
+          projectId,
+          licenseId: license.id,
+        },
       },
     });
+    if (existing) {
+      return NextResponse.json(
+        { error: "License is already assigned to this project." },
+        { status: 409 },
+      );
+    }
 
-    // Recalculate compliance score
-    const complianceScore = await computeComplianceScore(projectId);
-    await db.project.update({
-      where: { id: projectId },
-      data: { complianceScore },
+    const projectLicense = await db.$transaction(async (transaction) => {
+      const link = await transaction.projectLicense.create({
+        data: {
+          projectId,
+          licenseId: license.id,
+          required: result.data.required,
+          notes: result.data.notes ? sanitizeString(result.data.notes) : null,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          orgId: context.orgId,
+          userId: context.userId,
+          action: "assign_license",
+          entityType: "project",
+          entityId: project.id,
+          entityName: project.name,
+          details: JSON.stringify({
+            licenseId: license.id,
+            licenseNumber: license.licenseNumber,
+            required: link.required,
+          }),
+        },
+      });
+      return link;
     });
 
-    return NextResponse.json({ projectLicense, complianceScore }, { status: 201 });
+    const compliance = await refreshProjectCompliance(projectId, context.orgId);
+    return NextResponse.json(
+      {
+        projectLicense,
+        complianceScore: compliance?.score ?? 100,
+        compliance,
+      },
+      { status: 201 },
+    );
   } catch (error) {
-    console.error('Link license error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Link license error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

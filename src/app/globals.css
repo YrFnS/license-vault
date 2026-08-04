@@ -76,6 +76,11 @@
   --sidebar-accent-foreground: oklch(0.25 0.04 155);
   --sidebar-border: oklch(0.92 0.01 155);
   --sidebar-ring: oklch(0.527 0.15 155);
+  --brand-primary: #10b981;
+  --brand-secondary: #14b8a6;
+  --brand-accent: #0d9488;
+  --font-heading: Geist;
+  --font-body: Geist;
 }
 
 .dark {
@@ -112,17 +117,42 @@
   --sidebar-ring: oklch(0.6 0.16 155);
 }
 
+html[data-font-scale="compact"] {
+  font-size: 15px;
+}
+
+html[data-font-scale="large"] {
+  font-size: 17px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body), var(--font-geist-sans), system-ui, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading), var(--font-geist-sans), system-ui, sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
   }
 }
 
 @keyframes gradient-shift {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -136,23 +166,55 @@
 }
 
 @keyframes mesh-float-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -20px) scale(1.05); }
-  66% { transform: translate(-20px, 15px) scale(0.95); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, -20px) scale(1.05);
+  }
+  66% {
+    transform: translate(-20px, 15px) scale(0.95);
+  }
 }
 
 @keyframes mesh-float-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-25px, 20px) scale(1.08); }
-  66% { transform: translate(15px, -25px) scale(0.92); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(-25px, 20px) scale(1.08);
+  }
+  66% {
+    transform: translate(15px, -25px) scale(0.92);
+  }
 }
 
 @keyframes mesh-float-3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(20px, 15px) scale(0.96); }
-  66% { transform: translate(-30px, -10px) scale(1.04); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(20px, 15px) scale(0.96);
+  }
+  66% {
+    transform: translate(-30px, -10px) scale(1.04);
+  }
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
