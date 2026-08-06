@@ -6,6 +6,8 @@
   "createWorkflow": "Create Workflow",
   "category": "Category",
   "licenseRenewal": "License Renewal",
+  "license_renewal": "License Renewal",
+  "license_renewalWorkflow": "License Renewal",
   "onboarding": "Subcontractor Onboarding",
   "audit": "Compliance Audit",
   "documentReview": "Document Review",

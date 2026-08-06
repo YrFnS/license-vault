@@ -1,6 +1,12 @@
 {
   "title": "Keyboard Shortcuts",
   "subtitle": "Quick actions to speed up your workflow",
+  "description": "Quick actions to speed up your workflow",
+  "search": "Search",
+  "newLicense": "Create New License",
+  "importCsv": "Import CSV",
+  "toggleSidebar": "Toggle Sidebar",
+  "showShortcuts": "Show Shortcuts",
   "then": "then",
   "footer": "Use these shortcuts to navigate faster",
   "categories": {

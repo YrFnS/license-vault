@@ -6,6 +6,8 @@
   "createWorkflow": "إنشاء سير عمل",
   "category": "الفئة",
   "licenseRenewal": "تجديد الترخيص",
+  "license_renewal": "تجديد الترخيص",
+  "license_renewalWorkflow": "تجديد الترخيص",
   "onboarding": "تأهيل المقاولين",
   "audit": "تدقيق الامتثال",
   "documentReview": "مراجعة المستندات",
