@@ -74,12 +74,13 @@ export default async function middleware(request: NextRequest) {
 
   if (pathname.startsWith("/api/")) {
     const ip = getClientIp(request);
-    const limit = pathname.startsWith("/api/auth/")
+    const isAuthAttempt = pathname.startsWith("/api/auth/") && request.method !== "GET";
+    const limit = isAuthAttempt
       ? AUTH_LIMIT
       : pathname.startsWith("/api/v1/")
         ? PUBLIC_API_LIMIT
         : GENERAL_API_LIMIT;
-    const prefix = pathname.startsWith("/api/auth/")
+    const prefix = isAuthAttempt
       ? "auth"
       : pathname.startsWith("/api/v1/")
         ? "public"
