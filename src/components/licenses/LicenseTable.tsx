@@ -251,6 +251,7 @@ function LicenseCard({ license, onDelete, onRenew, onQuickView, t, tc, selectMod
                 <AlertDialogTrigger asChild>
                   <Button variant="ghost" size="sm" className="text-destructive">
                     <Trash2 className="size-3.5" />
+                    <span className="sr-only">{tc('delete')}</span>
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>

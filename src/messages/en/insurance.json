@@ -31,6 +31,10 @@
     "bond": "Bond",
     "certificate": "Certificate"
   },
+  "insurance": "Insurance",
+  "bond": "Bond",
+  "certificate": "Certificate",
+  "cancel": "Cancel",
   "allTypes": "All Types",
   "filterByStatus": "Filter by Status",
   "namePlaceholder": "e.g., General Liability Insurance",

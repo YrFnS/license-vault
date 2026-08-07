@@ -31,6 +31,10 @@
     "bond": "كفالة",
     "certificate": "شهادة"
   },
+  "insurance": "تأمين",
+  "bond": "كفالة",
+  "certificate": "شهادة",
+  "cancel": "إلغاء",
   "allTypes": "جميع الأنواع",
   "filterByStatus": "تصفية حسب الحالة",
   "namePlaceholder": "مثال: تأمين المسؤولية العامة",
