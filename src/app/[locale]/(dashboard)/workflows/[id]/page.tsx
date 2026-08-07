@@ -100,6 +100,7 @@ const stepTypeColor: Record<string, string> = {
 
 const actionConfig: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   approve: { label: 'Approve', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800' },
+  complete: { label: 'Complete', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800' },
   reject: { label: 'Reject', icon: XCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 border-red-200 dark:border-red-800' },
   request_changes: { label: 'Request Changes', icon: RotateCcw, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 border-amber-200 dark:border-amber-800' },
   delegate: { label: 'Delegate', icon: Send, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-950/30 hover:bg-teal-100 dark:hover:bg-teal-950/50 border-teal-200 dark:border-teal-800' },
@@ -382,7 +383,11 @@ export default function WorkflowInstancePage() {
                   className="text-xs min-h-[60px] resize-none"
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(actionConfig).map(([key, cfg]) => {
+                  {Object.entries(
+                    ['approval', 'review'].includes(currentStep.type)
+                      ? actionConfig
+                      : { complete: actionConfig.complete },
+                  ).map(([key, cfg]) => {
                     const Icon = cfg.icon;
                     return (
                       <Button
