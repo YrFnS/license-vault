@@ -282,14 +282,14 @@ export function ComplianceForecast({ licenses, totalLicenses, activeLicenses }: 
                           <Clock className="size-2.5" />
                           {formatDate(license.expirationDate)}
                         </span>
-                        <span className="text-xs text-muted-foreground/40">·</span>
+                        <span className="text-xs text-muted-foreground">·</span>
                         <span className={`text-xs font-semibold ${
                           daysRemaining < 0
                             ? 'text-red-600 dark:text-red-400'
                             : daysRemaining < 5
                               ? 'text-red-600 dark:text-red-400'
                               : daysRemaining < 30
-                                ? 'text-amber-600 dark:text-amber-400'
+                                ? 'text-amber-700 dark:text-amber-400'
                                 : daysRemaining < 60
                                   ? 'text-yellow-600 dark:text-yellow-400'
                                   : 'text-emerald-600 dark:text-emerald-400'

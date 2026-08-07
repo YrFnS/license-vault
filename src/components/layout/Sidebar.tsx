@@ -221,7 +221,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       ? t("collapseSection", { section: sectionName })
                       : t("expandSection", { section: sectionName })
                   }
-                  className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
+                  className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
                 >
                   <span>{sectionName}</span>
                   <ChevronDown
@@ -243,7 +243,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                           className={cn(
                             "relative flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors",
                             isActive
-                              ? "bg-primary/10 font-medium text-primary"
+                              ? "bg-primary/10 font-medium text-emerald-700 dark:text-emerald-400"
                               : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200",
                           )}
                         >
@@ -278,7 +278,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <p className="truncate text-xs font-medium text-slate-700 dark:text-slate-300">
               {userName}
             </p>
-            <p className="truncate text-[10px] capitalize text-slate-400">
+            <p className="truncate text-[10px] capitalize text-slate-600">
               {(session?.user as { role?: string } | undefined)?.role || "member"}
             </p>
           </div>

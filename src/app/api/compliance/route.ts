@@ -62,7 +62,7 @@ export async function POST() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -78,6 +78,62 @@ export async function GET() {
 
     if (!membership) {
       return NextResponse.json({ error: 'No organization found' }, { status: 404 });
+    }
+
+    if (new URL(request.url).searchParams.get('type') === 'score') {
+      const now = new Date();
+      const [licenses, insuranceBonds, ceTrackings, documentCount] = await Promise.all([
+        db.license.findMany({
+          where: { orgId: membership.orgId },
+          select: { id: true, name: true, expirationDate: true },
+        }),
+        db.insuranceBond.findMany({
+          where: { orgId: membership.orgId },
+          select: { expirationDate: true, status: true },
+        }),
+        db.cETracking.findMany({
+          where: { orgId: membership.orgId },
+          select: { hoursEarned: true, hoursRequired: true },
+        }),
+        db.licenseDocument.count({ where: { orgId: membership.orgId } }),
+      ]);
+      const activeLicenses = licenses.filter((license) => license.expirationDate >= now);
+      const activeInsurance = insuranceBonds.filter(
+        (bond) => bond.expirationDate >= now && bond.status === 'active',
+      );
+      const completedCe = ceTrackings.filter((record) => record.hoursEarned >= record.hoursRequired);
+      const score = (active: number, total: number) => total ? Math.round((active / total) * 100) : 0;
+      const licenseScore = score(activeLicenses.length, licenses.length);
+      const insuranceScore = score(activeInsurance.length, insuranceBonds.length);
+      const ceScore = score(completedCe.length, ceTrackings.length);
+      const documentScore = licenses.length ? score(documentCount, licenses.length) : 0;
+      const scored = [licenseScore, insuranceScore, ceScore, documentScore].filter((value, index) => [licenses.length, insuranceBonds.length, ceTrackings.length, documentCount][index] > 0);
+      const overallScore = scored.length ? Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length) : 0;
+      const atRiskItems = licenses
+        .filter((license) => license.expirationDate < now || license.expirationDate.getTime() - now.getTime() <= 30 * 86400000)
+        .map((license) => ({
+          id: license.id,
+          name: license.name,
+          type: 'license',
+          expirationDate: license.expirationDate.toISOString(),
+          status: license.expirationDate < now ? 'expired' : 'expiring',
+          daysUntil: Math.ceil((license.expirationDate.getTime() - now.getTime()) / 86400000),
+        }));
+
+      return NextResponse.json({
+        overallScore,
+        trend: 'same',
+        trendDelta: 0,
+        breakdown: {
+          license: { score: licenseScore, total: licenses.length, active: activeLicenses.length },
+          insurance: { score: insuranceScore, total: insuranceBonds.length, active: activeInsurance.length },
+          ce: { score: ceScore, total: ceTrackings.length, active: completedCe.length },
+          documents: { score: documentScore, total: licenses.length, active: documentCount },
+        },
+        atRiskItems,
+        recommendations: [],
+        history: [],
+      });
     }
 
     const shares = await db.complianceShare.findMany({

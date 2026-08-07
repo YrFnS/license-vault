@@ -138,7 +138,7 @@ export function TopNav() {
         <Button
           variant="outline"
           size="sm"
-          className="hidden h-8 w-48 items-center justify-start gap-2 border-slate-200 px-3 font-normal text-slate-400 sm:flex dark:border-slate-700"
+          className="hidden h-8 w-48 items-center justify-start gap-2 border-slate-200 px-3 font-normal text-slate-600 sm:flex dark:border-slate-700"
           onClick={() => setSearchOpen(true)}
         >
           <Search className="size-3.5" />

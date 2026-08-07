@@ -3,7 +3,7 @@
 import { useTranslations, useLocale } from "next-intl";
 // v2 redesign
 import { Link } from "@/i18n/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
 	Shield,
 	Bell,
@@ -73,7 +73,7 @@ export default function LandingPage() {
 						</Button>
 						<Button
 							size="sm"
-							className="bg-emerald-600 hover:bg-emerald-700 text-white"
+							className="bg-emerald-700 hover:bg-emerald-800 text-white"
 							asChild
 						>
 							<Link href="/signup">{t("hero.cta")}</Link>
@@ -121,7 +121,7 @@ export default function LandingPage() {
 							</Button>
 							<Button
 								size="sm"
-								className="bg-emerald-600 hover:bg-emerald-700 text-white"
+								className="bg-emerald-700 hover:bg-emerald-800 text-white"
 								asChild
 							>
 								<Link href="/signup">{t("hero.cta")}</Link>
@@ -151,7 +151,7 @@ export default function LandingPage() {
 								<div className="mt-8 flex flex-wrap gap-3">
 									<Button
 										size="lg"
-										className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+										className="bg-emerald-700 hover:bg-emerald-800 text-white gap-2"
 										asChild
 									>
 										<Link href="/signup">
@@ -231,7 +231,7 @@ export default function LandingPage() {
 											</p>
 											<p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
 												10
-												<span className="text-base font-normal text-slate-400">
+												<span className="text-base font-normal text-slate-600">
 													/ 12
 												</span>
 											</p>
@@ -246,7 +246,7 @@ export default function LandingPage() {
 				{/* ─── Trusted By ─── */}
 				<section className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
 					<div className="mx-auto max-w-6xl px-4 md:px-6 py-10">
-						<p className="text-center text-xs font-medium uppercase tracking-wider text-slate-400 mb-6">
+						<p className="text-center text-xs font-medium uppercase tracking-wider text-slate-600 mb-6">
 							{t("trustedBy.title")}
 						</p>
 						<div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
@@ -258,7 +258,7 @@ export default function LandingPage() {
 								"Westbrook Group",
 								"Greenfield Corp",
 							].map((name) => (
-								<span key={name} className="text-sm font-medium text-slate-400">
+								<span key={name} className="text-sm font-medium text-slate-600">
 									{name}
 								</span>
 							))}
@@ -273,7 +273,7 @@ export default function LandingPage() {
 				>
 					<div className="mx-auto max-w-6xl px-4 md:px-6 py-16 md:py-24">
 						<div className="max-w-2xl mb-12">
-							<p className="text-xs font-medium uppercase tracking-wider text-emerald-600 mb-2">
+							<p className="text-xs font-medium uppercase tracking-wider text-emerald-700 mb-2">
 								{t("features.title").split(" ").slice(0, 1).join(" ")}
 							</p>
 							<h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
@@ -358,7 +358,7 @@ export default function LandingPage() {
 				>
 					<div className="mx-auto max-w-6xl px-4 md:px-6 py-16 md:py-24">
 						<div className="max-w-2xl mb-12">
-							<p className="text-xs font-medium uppercase tracking-wider text-emerald-600 mb-2">
+							<p className="text-xs font-medium uppercase tracking-wider text-emerald-700 mb-2">
 								How it works
 							</p>
 							<h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
@@ -371,7 +371,7 @@ export default function LandingPage() {
 
 						<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 							{[
-								{ icon: Upload, titleKey: "step1", color: "bg-emerald-600" },
+								{ icon: Upload, titleKey: "step1", color: "bg-emerald-700" },
 								{ icon: Bell, titleKey: "step2", color: "bg-amber-500" },
 								{ icon: ArrowRight, titleKey: "step3", color: "bg-sky-600" },
 							].map(({ icon: Icon, titleKey, color }, i) => (
@@ -384,7 +384,7 @@ export default function LandingPage() {
 										</div>
 									</div>
 									<div>
-										<p className="text-xs font-medium text-slate-400 mb-1">
+										<p className="text-xs font-medium text-slate-600 mb-1">
 											Step {i + 1}
 										</p>
 										<h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -407,7 +407,7 @@ export default function LandingPage() {
 				>
 					<div className="mx-auto max-w-6xl px-4 md:px-6 py-16 md:py-24">
 						<div className="max-w-2xl mb-12">
-							<p className="text-xs font-medium uppercase tracking-wider text-emerald-600 mb-2">
+							<p className="text-xs font-medium uppercase tracking-wider text-emerald-700 mb-2">
 								Pricing
 							</p>
 							<h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
@@ -455,7 +455,7 @@ export default function LandingPage() {
 							{/* Pro */}
 							<div className="rounded-lg border-2 border-emerald-500 p-6 relative">
 								<div className="absolute -top-3 start-4">
-									<span className="bg-emerald-600 text-white text-xs font-medium px-2.5 py-0.5 rounded-full">
+									<span className="bg-emerald-700 text-white text-xs font-medium px-2.5 py-0.5 rounded-full">
 										{t("pricing.pro.mostPopular")}
 									</span>
 								</div>
@@ -482,7 +482,7 @@ export default function LandingPage() {
 									))}
 								</ul>
 								<Button
-									className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 text-white"
+									className="w-full mt-6 bg-emerald-700 hover:bg-emerald-800 text-white"
 									asChild
 								>
 									<Link href="/signup">{t("pricing.pro.cta")}</Link>
@@ -544,7 +544,7 @@ export default function LandingPage() {
 							>
 								{t("footer.terms")}
 							</a>
-							<span className="text-slate-400">
+							<span className="text-slate-600">
 								&copy; {new Date().getFullYear()}
 							</span>
 						</div>
