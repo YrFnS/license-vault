@@ -16,6 +16,7 @@ const INTEGRATION_CATALOG = [
     name: "Autodesk Construction Cloud",
     category: "construction_erp",
     icon: "Layers",
+    iconUrl: "https://api.iconify.design/simple-icons:autodesk.svg?color=%2310b981",
     description:
       "Verify and store an Autodesk Construction API endpoint securely. Automatic record sync requires a provider adapter.",
     dataFlows: ["licenses", "projects", "documents"],
@@ -43,6 +44,7 @@ const INTEGRATION_CATALOG = [
     name: "QuickBooks",
     category: "accounting",
     icon: "Calculator",
+    iconUrl: "https://api.iconify.design/simple-icons:quickbooks.svg?color=%2310b981",
     description:
       "Verify and store an API endpoint securely. A supported OAuth and data-sync adapter is required for production QuickBooks sync.",
     dataFlows: ["licenses", "contractors", "documents"],
@@ -52,6 +54,7 @@ const INTEGRATION_CATALOG = [
     name: "Sage",
     category: "accounting",
     icon: "DollarSign",
+    iconUrl: "https://api.iconify.design/simple-icons:sage.svg?color=%2310b981",
     description:
       "Verify and store a Sage API endpoint securely. Automatic record sync requires a provider adapter.",
     dataFlows: ["licenses", "contractors", "documents"],
@@ -70,6 +73,7 @@ const INTEGRATION_CATALOG = [
     name: "Xero",
     category: "accounting",
     icon: "Calculator",
+    iconUrl: "https://api.iconify.design/simple-icons:xero.svg?color=%2310b981",
     description:
       "Verify and store a Xero API endpoint securely. A supported OAuth and data-sync adapter is required for production sync.",
     dataFlows: ["licenses", "contractors", "documents"],
@@ -79,6 +83,7 @@ const INTEGRATION_CATALOG = [
     name: "ADP",
     category: "hris",
     icon: "Users",
+    iconUrl: "https://api.iconify.design/simple-icons:adp.svg?color=%2310b981",
     description:
       "Verify and store an ADP API endpoint securely. Automatic record sync requires a provider adapter.",
     dataFlows: ["licenses", "contractors", "documents"],
@@ -106,6 +111,7 @@ const INTEGRATION_CATALOG = [
     name: "Gusto",
     category: "hris",
     icon: "Users",
+    iconUrl: "https://api.iconify.design/simple-icons:gusto.svg?color=%2310b981",
     description:
       "Verify and store a Gusto API endpoint securely. Automatic record sync requires a provider adapter.",
     dataFlows: ["licenses", "contractors"],

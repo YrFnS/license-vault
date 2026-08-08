@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
-import { Plug, ArrowRightLeft, Puzzle } from 'lucide-react';
+import { Plug, ArrowRightLeft } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
-import { CatalogIntegration, ICON_MAP, fadeIn } from './types';
-import { getDataFlowLabel } from './helpers';
+import { CatalogIntegration, fadeIn } from './types';
+import { CatalogIcon, getDataFlowLabel } from './helpers';
 import { CategoryBadge } from './CategoryBadge';
 
 interface AvailableIntegrationCardProps {
@@ -19,8 +19,6 @@ export function AvailableIntegrationCard({
   onConnect,
 }: AvailableIntegrationCardProps) {
   const t = useTranslations('integrations');
-  const Icon = ICON_MAP[integration.icon] || Puzzle;
-
   return (
     <motion.div
       key={integration.type}
@@ -34,7 +32,10 @@ export function AvailableIntegrationCard({
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center size-10 rounded-xl bg-gradient-to-br from-muted/80 to-muted/40 group-hover:from-emerald-500/20 group-hover:to-teal-500/20 transition-all duration-300 shrink-0">
-                <Icon className="size-5 text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-300" />
+                <CatalogIcon
+                  integration={integration}
+                  className="size-5 text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-300"
+                />
               </div>
               <div className="min-w-0">
                 <h3 className="font-semibold text-sm">{integration.name}</h3>

@@ -4,7 +4,8 @@ export const metadata: Metadata = {
   title: "LicenseVault - Contractor License Compliance Management",
   description: "Track contractor licenses, permits, and certifications across your entire organization. Get alerts before they expire.",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icons/icon.svg",
+    apple: "/icons/icon-192x192.png",
   },
 };
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   RefreshCw,
@@ -19,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 import { IntegrationData, CatalogIntegration, fadeIn } from "./types";
-import { getIntegrationIcon, getDataFlowLabel, formatTime } from "./helpers";
+import { CatalogIcon, getDataFlowLabel, formatTime } from "./helpers";
 import { StatusBadge } from "./StatusBadge";
 import { CategoryBadge } from "./CategoryBadge";
 import { SyncHistory } from "./SyncHistory";
@@ -46,10 +45,6 @@ export function IntegrationCard({
   onDisconnect,
 }: IntegrationCardProps) {
   const t = useTranslations("integrations");
-  const IntegrationIcon = useMemo(
-    () => getIntegrationIcon(integration.type, catalog),
-    [integration.type, catalog],
-  );
   const availableDefinition = catalog.find(
     (item) => item.type === integration.type,
   );
@@ -70,7 +65,14 @@ export function IntegrationCard({
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <IntegrationIcon className="size-5 text-primary" />
+                  <CatalogIcon
+                    integration={{
+                      icon: availableDefinition?.icon ?? "Puzzle",
+                      iconUrl: availableDefinition?.iconUrl,
+                      name: integration.name,
+                    }}
+                    className="size-5 text-primary"
+                  />
                 </div>
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold">

@@ -55,6 +55,7 @@ export interface CatalogIntegration {
   name: string;
   category: string;
   icon: string;
+  iconUrl?: string;
   description: string;
   dataFlows: string[];
   connectionAvailable: boolean;

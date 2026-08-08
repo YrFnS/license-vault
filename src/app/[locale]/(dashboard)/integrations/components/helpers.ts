@@ -1,11 +1,28 @@
+import Image from "next/image";
+import React from "react";
 import { ICON_MAP, CatalogIntegration } from './types';
 
-export function getIntegrationIcon(type: string, catalog: CatalogIntegration[]) {
-  const found = catalog.find((i) => i.type === type);
-  if (found && ICON_MAP[found.icon]) return ICON_MAP[found.icon];
-  const Puzzle = ICON_MAP['Puzzle'];
-  return Puzzle!;
+export function CatalogIcon({
+  integration,
+  className = "size-5",
+}: {
+  integration: Pick<CatalogIntegration, "icon" | "iconUrl" | "name">;
+  className?: string;
+}) {
+  if (integration.iconUrl) {
+    return React.createElement(Image, {
+      src: integration.iconUrl,
+      alt: `${integration.name} logo`,
+      width: 20,
+      height: 20,
+      className,
+    });
+  }
+
+  const Icon = ICON_MAP[integration.icon] ?? ICON_MAP.Puzzle;
+  return Icon ? React.createElement(Icon, { className }) : null;
 }
+
 
 export function getDataFlowLabel(flow: string, t: (key: string) => string): string {
   switch (flow) {

@@ -14,8 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { ICON_MAP, CatalogIntegration } from './types';
-import { getDataFlowLabel } from './helpers';
+import { CatalogIntegration } from './types';
+import { CatalogIcon, getDataFlowLabel } from './helpers';
 
 interface ConnectDialogProps {
   open: boolean;
@@ -60,14 +60,15 @@ export function ConnectDialog({
 
   if (!selectedIntegration) return null;
 
-  const ConnectIcon = ICON_MAP[selectedIntegration.icon] || (ICON_MAP['Puzzle']!);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ConnectIcon className="size-5 text-emerald-600 dark:text-emerald-400" />
+            <CatalogIcon
+              integration={selectedIntegration}
+              className="size-5 text-emerald-600 dark:text-emerald-400"
+            />
             {t('connect')} {selectedIntegration.name}
           </DialogTitle>
           <DialogDescription>
