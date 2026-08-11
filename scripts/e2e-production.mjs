@@ -245,15 +245,26 @@ async function loginContext(browser, account) {
   return context;
 }
 
-async function testManagementApis(context, account, expectedStatus) {
+async function testManagementApis(
+  context,
+  account,
+  expectedTeamStatus,
+  expectedAdminStatsStatus,
+) {
   return runPageCheck(context, `${account.label} management authorization`, async (page) => {
     await gotoPath(page, "/en/dashboard");
     const team = await browserFetch(page, "/api/team");
     const adminStats = await browserFetch(page, "/api/admin/stats");
-    assert(team.status === expectedStatus, `/api/team expected ${expectedStatus}, received ${team.status}`);
-    assert(adminStats.status === expectedStatus, `/api/admin/stats expected ${expectedStatus}, received ${adminStats.status}`);
+    assert(
+      team.status === expectedTeamStatus,
+      `/api/team expected ${expectedTeamStatus}, received ${team.status}`,
+    );
+    assert(
+      adminStats.status === expectedAdminStatsStatus,
+      `/api/admin/stats expected ${expectedAdminStatsStatus}, received ${adminStats.status}`,
+    );
     return { teamStatus: team.status, adminStatsStatus: adminStats.status };
-  }, { allowConsoleErrors: expectedStatus !== 200 });
+  }, { allowConsoleErrors: expectedTeamStatus !== 200 || expectedAdminStatsStatus !== 200 });
 }
 
 async function testLicenseCrud(context, account) {
@@ -551,22 +562,23 @@ try {
         await smokeRoute(context, account.label, ownerRoutes[index]);
         if ((index + 1) % 8 === 0) await sleep(2_000);
       }
-      await testManagementApis(context, account, 200);
+      await testManagementApis(context, account, 200, 200);
       await testLicenseCrud(context, account);
     } else if (account.label === "admin") {
       for (const route of ["/en/dashboard", "/en/licenses", "/en/team", "/en/settings/api", "/en/audit-log", "/en/admin"]) {
         await smokeRoute(context, account.label, route);
       }
-      await testManagementApis(context, account, 200);
+      await testManagementApis(context, account, 200, 200);
       await testLicenseCrud(context, account);
     } else if (account.label === "member") {
       for (const route of ["/en/dashboard", "/en/licenses", "/en/projects", "/en/compliance", "/en/settings"]) {
         await smokeRoute(context, account.label, route);
       }
-      await testManagementApis(context, account, 403);
+      await testManagementApis(context, account, 200, 403);
       await testMemberWriteDenial(context);
       await runPageCheck(context, "member admin page denial", async (page) => {
         await gotoPath(page, "/en/admin");
+        await waitForText(page, "You don't have permission to access this page");
         const text = await bodyText(page);
         assert(text.includes("You don't have permission to access this page"), "Member did not receive the admin access-denied state");
         return { denied: true };

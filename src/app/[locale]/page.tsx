@@ -50,7 +50,7 @@ export default function LandingPage() {
 							href="#features"
 							className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
 						>
-							{t("features.title").split(" ").slice(0, 2).join(" ")}
+							{t("footer.features")}
 						</a>
 						<a
 							href="#how-it-works"
@@ -62,7 +62,7 @@ export default function LandingPage() {
 							href="#pricing"
 							className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
 						>
-							{t("pricing.title").split(" ").slice(0, 2).join(" ")}
+							{t("footer.pricing")}
 						</a>
 					</nav>
 
@@ -101,7 +101,7 @@ export default function LandingPage() {
 								href="#features"
 								className="text-sm text-slate-600 dark:text-slate-400"
 							>
-								{t("features.title").split(" ").slice(0, 2).join(" ")}
+								{t("footer.features")}
 							</a>
 							<a
 								href="#how-it-works"
@@ -113,7 +113,7 @@ export default function LandingPage() {
 								href="#pricing"
 								className="text-sm text-slate-600 dark:text-slate-400"
 							>
-								{t("pricing.title").split(" ").slice(0, 2).join(" ")}
+								{t("footer.pricing")}
 							</a>
 							<hr className="border-slate-200 dark:border-slate-800" />
 							<Button variant="ghost" size="sm" asChild>
