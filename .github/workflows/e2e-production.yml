@@ -1,13 +1,14 @@
-name: Production E2E
+name: Browser E2E
 
 on:
+  pull_request:
+    branches: [main]
   push:
-    branches:
-      - agent/e2e-license-vault-20260811
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: production-e2e-${{ github.ref }}
+  group: browser-e2e-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -16,7 +17,9 @@ permissions:
 jobs:
   browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      BASE_URL: ${{ github.event_name == 'pull_request' && 'https://license-vault-git-agent-7a13d3-yasserreyadh-gmailcoms-projects.vercel.app' || 'https://license-vault-self.vercel.app' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,9 +41,24 @@ jobs:
           echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
           "$CHROME_PATH" --version
 
-      - name: Run production browser E2E
+      - name: Wait for deployment under test
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            status="$(curl --location --silent --show-error --output /tmp/landing.html --write-out '%{http_code}' "$BASE_URL/en" || true)"
+            if [[ "$status" == "200" ]] && grep -q '>Features<' /tmp/landing.html; then
+              echo "Deployment is ready at $BASE_URL"
+              exit 0
+            fi
+            echo "Attempt $attempt/90: deployment not ready (HTTP $status)"
+            sleep 10
+          done
+          echo "Deployment did not become ready at $BASE_URL"
+          exit 1
+
+      - name: Run browser E2E
         env:
-          BASE_URL: https://license-vault-self.vercel.app
           E2E_PASSWORD: DemoPass123!
         run: node scripts/e2e-production.mjs
 
@@ -56,7 +74,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: license-vault-production-e2e-${{ github.run_id }}
+          name: license-vault-browser-e2e-${{ github.run_id }}
           path: artifacts/e2e
           if-no-files-found: warn
           retention-days: 14
