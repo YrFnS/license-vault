@@ -1,14 +1,17 @@
 name: Browser E2E
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  deployment_status:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: Vercel deployment URL to test
+        required: true
+        default: https://license-vault-self.vercel.app
+        type: string
 
 concurrency:
-  group: browser-e2e-${{ github.event_name }}-${{ github.ref }}
+  group: browser-e2e-${{ github.event_name }}-${{ github.event.deployment.id || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -16,13 +19,17 @@ permissions:
 
 jobs:
   browser-e2e:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment_status.creator.login == 'vercel[bot]' && startsWith(github.event.deployment_status.environment_url, 'https://license-vault-'))
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     env:
-      BASE_URL: ${{ github.event_name == 'pull_request' && 'https://license-vault-git-agent-7a13d3-yasserreyadh-gmailcoms-projects.vercel.app' || 'https://license-vault-self.vercel.app' }}
+      BASE_URL: ${{ github.event_name == 'deployment_status' && github.event.deployment_status.environment_url || inputs.base_url }}
+      DEPLOYMENT_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || github.sha }}
     steps:
-      - name: Checkout repository
+      - name: Checkout trusted E2E harness
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -41,25 +48,37 @@ jobs:
           echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
           "$CHROME_PATH" --version
 
-      - name: Wait for deployment under test
+      - name: Verify deployment target
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 90); do
-            status="$(curl --location --silent --show-error --output /tmp/landing.html --write-out '%{http_code}' "$BASE_URL/en" || true)"
-            if [[ "$status" == "200" ]] && grep -q '>Features<' /tmp/landing.html; then
-              echo "Deployment is ready at $BASE_URL"
+
+          case "$BASE_URL" in
+            https://license-vault-*-yasserreyadh-gmailcoms-projects.vercel.app|https://license-vault-self.vercel.app|https://license-vault-yasserreyadh-gmailcoms-projects.vercel.app)
+              ;;
+            *)
+              echo "::error::Refusing untrusted deployment URL: $BASE_URL"
+              exit 1
+              ;;
+          esac
+
+          target="${BASE_URL%/}/en"
+          for attempt in $(seq 1 12); do
+            status="$(curl --location --silent --show-error --max-time 20 --output /tmp/landing.html --write-out '%{http_code}' "$target" || true)"
+            if [[ "$status" =~ ^2[0-9][0-9]$ ]] && grep -Eiq '<!doctype html|<html' /tmp/landing.html; then
+              echo "Deployment $DEPLOYMENT_SHA is ready at $BASE_URL"
               exit 0
             fi
-            echo "Attempt $attempt/90: deployment not ready (HTTP $status)"
-            sleep 10
+            echo "Attempt $attempt/12: deployment not ready (HTTP $status)"
+            sleep 5
           done
-          echo "Deployment did not become ready at $BASE_URL"
+
+          echo "::error::Deployment did not become ready at $BASE_URL"
           exit 1
 
       - name: Run browser E2E
         env:
-          E2E_PASSWORD: DemoPass123!
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
         run: node scripts/e2e-production.mjs
 
       - name: Publish test summary
