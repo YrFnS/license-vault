@@ -15,7 +15,6 @@ async function findPortalSubcontractor(token: string) {
   return db.subcontractor.findFirst({
     where: {
       portalToken: token,
-      portalExpiresAt: { gt: new Date() },
       status: "active",
     },
     include: {
@@ -53,8 +52,17 @@ export async function GET(
     const subcontractor = await findPortalSubcontractor(token);
     if (!subcontractor) {
       return NextResponse.json(
-        { error: "This portal link is invalid or has expired." },
+        { error: "This portal link is invalid or has been removed." },
         { status: 404 },
+      );
+    }
+    if (
+      !subcontractor.portalExpiresAt ||
+      subcontractor.portalExpiresAt <= new Date()
+    ) {
+      return NextResponse.json(
+        { error: "This portal link has expired." },
+        { status: 410 },
       );
     }
 
@@ -125,8 +133,17 @@ export async function PUT(
     const subcontractor = await findPortalSubcontractor(token);
     if (!subcontractor) {
       return NextResponse.json(
-        { error: "This portal link is invalid or has expired." },
+        { error: "This portal link is invalid or has been removed." },
         { status: 404 },
+      );
+    }
+    if (
+      !subcontractor.portalExpiresAt ||
+      subcontractor.portalExpiresAt <= new Date()
+    ) {
+      return NextResponse.json(
+        { error: "This portal link has expired." },
+        { status: 410 },
       );
     }
 
