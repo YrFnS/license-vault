@@ -37,6 +37,9 @@ jobs:
       - name: Generate Prisma client
         run: bun run db:generate
 
+      - name: Unit tests
+        run: bun test
+
       - name: Type check
         run: bun run typecheck
 
