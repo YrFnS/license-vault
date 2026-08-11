@@ -1,0 +1,27 @@
+name: Production E2E
+
+on:
+  push:
+    branches:
+      - agent/e2e-license-vault-20260811
+  workflow_dispatch:
+
+concurrency:
+  group: production-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe production login
+        env:
+          BASE_URL: https://license-vault-self.vercel.app
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --location --silent --show-error \
+            --output /tmp/login.html \
+            --write-out 'status=%{http_code} final_url=%{url_effective}\n' \
+            "$BASE_URL/en/login"
+          grep -q 'LicenseVault' /tmp/login.html
